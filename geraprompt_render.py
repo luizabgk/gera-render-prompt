@@ -1,8 +1,8 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GeraPrompt Render â€” GUI separada (gerador de CENAS 3D via API do Magnific).
-NÃ£o tem vÃ­nculo com o GeraPrompt HTML.
+GeraPrompt Render — GUI separada (gerador de CENAS 3D via API do Magnific).
+Não tem ví­nculo com o GeraPrompt HTML.
 """
 import os
 import sys
@@ -26,16 +26,16 @@ PROMPT_PADRAO = ("aerial hyperrealist photograph of a high-end tropical gated co
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("GeraPrompt Render â€” gerar cena")
+        root.title("GeraPrompt Render — gerar cena")
         root.geometry("760x700")
         self.ref = ""
         self.pasta = ""
         self.foto = None
 
-        # 1) referÃªncia
+        # 1) referência
         f1 = tk.Frame(root)
         f1.pack(fill="x", padx=14, pady=8)
-        tk.Button(f1, text="1. Imagem de referÃªncia", width=22, command=self.escolher_ref).pack(side="left")
+        tk.Button(f1, text="1. Imagem de referência", width=22, command=self.escolher_ref).pack(side="left")
         self.lbl_ref = tk.Label(f1, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_ref.pack(side="left", padx=8)
 
@@ -45,10 +45,10 @@ class App:
         self.txt_prompt.pack(fill="both", padx=14, pady=4)
         self.txt_prompt.insert("end", PROMPT_PADRAO)
 
-        # 3) opÃ§Ãµes
+        # 3) opções
         f2 = tk.Frame(root)
         f2.pack(fill="x", padx=14, pady=4)
-        tk.Label(f2, text="ProporÃ§Ã£o:").pack(side="left")
+        tk.Label(f2, text="Proporção:").pack(side="left")
         self.cmb_aspect = ttk.Combobox(f2, values=["16:9", "1:1", "4:3", "3:4", "9:16", "3:2"], width=8)
         self.cmb_aspect.set("16:9")
         self.cmb_aspect.pack(side="left", padx=4)
@@ -60,11 +60,11 @@ class App:
         # 4) pasta
         f3 = tk.Frame(root)
         f3.pack(fill="x", padx=14, pady=4)
-        tk.Button(f3, text="3. Pasta de saÃ­da", width=22, command=self.escolher_pasta).pack(side="left")
+        tk.Button(f3, text="3. Pasta de saí­da", width=22, command=self.escolher_pasta).pack(side="left")
         self.lbl_pasta = tk.Label(f3, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_pasta.pack(side="left", padx=8)
 
-        # botÃ£o
+        # botão
         self.btn = tk.Button(root, text="GERAR RENDER", bg="#d2603a", fg="white",
                              font=("Segoe UI", 14, "bold"), height=2, command=self.gerar)
         self.btn.pack(fill="x", padx=14, pady=10)
@@ -78,14 +78,14 @@ class App:
         self.preview.pack(fill="both", expand=True, padx=14, pady=6)
 
     def escolher_ref(self):
-        p = filedialog.askopenfilename(title="Escolha a referÃªncia",
+        p = filedialog.askopenfilename(title="Escolha a referência",
                                        filetypes=[("Imagens", "*.png *.jpg *.jpeg *.webp"), ("Todos", "*.*")])
         if p:
             self.ref = p
             self.lbl_ref.config(text=os.path.basename(p))
 
     def escolher_pasta(self):
-        d = filedialog.askdirectory(title="Pasta de saÃ­da")
+        d = filedialog.askdirectory(title="Pasta de saí­da")
         if d:
             self.pasta = d
             self.lbl_pasta.config(text=d)
@@ -93,10 +93,10 @@ class App:
     def gerar(self):
         prompt = self.txt_prompt.get("1.0", "end").strip()
         if not prompt:
-            messagebox.showwarning("Falta", "O prompt estÃ¡ vazio.")
+            messagebox.showwarning("Falta", "O prompt está vazio.")
             return
         if not self.pasta:
-            messagebox.showwarning("Falta", "Escolha a pasta de saÃ­da.")
+            messagebox.showwarning("Falta", "Escolha a pasta de saí­da.")
             return
         self.btn.config(state="disabled")
         self.pbar.start(10)
@@ -106,7 +106,7 @@ class App:
         try:
             image_url = None
             if self.ref and os.path.exists(self.ref):
-                self.status.config(text="Enviando a referÃªncia...")
+                self.status.config(text="Enviando a referência...")
                 image_url = ag.upload_imagem(self.ref)
             self.status.config(text="Gerando no Magnific...")
             task_id = ag.gerar_no_magnific(prompt, self.cmb_aspect.get(), self.cmb_estilo.get(), image_url)
