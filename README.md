@@ -8,14 +8,15 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
-Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.2>
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.3>
 
 ---
 
-## Novidades da versão 1.2
+## Novidades da versão 1.3
 
+- **LoRA por nome:** o app carrega a lista da conta e mostra `nome (ID ...)`; não é mais preciso decorar números.
 - Botão **Gerar prompt pela imagem** usando a API **Image to Prompt** do Magnific.
-- Campo **LoRA (opcional)** para usar um estilo treinado na conta Magnific.
+- A **imagem de referência** e o **LoRA** agora estão explicados na interface: são coisas diferentes.
 - Campo de prompt começa **vazio**, para evitar gerar com prompt genérico.
 - Correção dos acentos e da codificação UTF-8.
 - Referências internas atualizadas para a pasta `_REFERENCIA_MN_3D`.
@@ -71,7 +72,7 @@ python geraprompt_render.py
 | **Gerar prompt pela imagem** | analisa a referência via API Image to Prompt e preenche o prompt |
 | **Proporção** | 16:9, 1:1, 4:3, 3:4, 9:16 ou 3:2 |
 | **Estilo** | modelo do Mystic: `super_real`, `realism`, `fluid`, `zen` ou `flexible` |
-| **LoRA (opcional)** | ID numérico de um LoRA de estilo da sua conta |
+| **LoRA (opcional)** | escolha pelo nome na lista de estilos treinados da sua conta |
 | **Pasta de saída** | onde o JPG será salvo |
 
 **Dica:** use uma referência boa e um prompt curto. O prompt do GeraPrompt já vem otimizado para até ~2.000 caracteres.
@@ -93,13 +94,14 @@ Para melhores resultados, use o prompt automático como ponto de partida e acres
 
 ## LoRA
 
-O campo LoRA é opcional. Para usar, informe apenas o **ID numérico**, por exemplo:
+O campo LoRA é **opcional** e não é a imagem de referência:
 
-```text
-2457071
-```
+- **Imagem de referência** é o botão **1** no topo: a imagem que será usada como base/oferecimento de cena.
+- **LoRA** é um **estilo treinado** na conta Magnific. Ele muda a aparência, mas não substitui a imagem.
 
-O app envia esse valor como `lora_id` no payload do Mystic.
+Na versão 1.3, o app consulta `GET /v1/ai/loras` e mostra uma lista com o nome de cada LoRA e o ID entre parênteses. Escolha pelo nome. O ID é enviado internamente como `lora_id`.
+
+Se a lista não carregar, clique em **Atualizar**. Verifique a variável `MAGNIFIC_API_KEY` e a Internet.
 
 LoRAs da conta da Luiza (referência interna):
 

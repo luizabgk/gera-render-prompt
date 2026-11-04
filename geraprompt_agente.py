@@ -225,6 +225,26 @@ def upload_imagem(caminho, content_type="image/jpeg"):
     return asset_url
 
 
+def listar_loras():
+    """Lista os LoRAs de estilo concluídos na conta Magnific."""
+    if not API_KEY:
+        raise RuntimeError("defina MAGNIFIC_API_KEY para listar os LoRAs")
+    raw = _get_json(f"{API_BASE}/v1/ai/loras", timeout=30)
+    d = raw.get("data", raw)
+    itens = []
+    for item in (d.get("customs") or []):
+        tr = item.get("training") or {}
+        if str(tr.get("status", "")).lower() != "completed":
+            continue
+        itens.append({
+            "id": str(item.get("id", "")),
+            "name": str(item.get("name") or item.get("id")),
+            "type": str(item.get("type") or "style"),
+        })
+    itens.sort(key=lambda x: x["name"].lower())
+    return itens
+
+
 def gerar_prompt_por_imagem(imagem, timeout_s=180):
     """Analisa uma imagem e devolve um prompt descritivo (API Image to Prompt).
 

@@ -30,6 +30,7 @@ class App:
         self.ref = ""
         self.pasta = ""
         self.foto = None
+        self.lora_por_label = {"Nenhum (sem LoRA)": None}
 
         # 1) referência
         f1 = tk.Frame(root)
@@ -64,9 +65,14 @@ class App:
         f_lora = tk.Frame(root)
         f_lora.pack(fill="x", padx=14, pady=4)
         tk.Label(f_lora, text="LoRA (opcional):").pack(side="left")
-        self.ent_lora = tk.Entry(f_lora, width=16)
-        self.ent_lora.pack(side="left", padx=4)
-        tk.Label(f_lora, text="ex.: 2457071 = paisagismo_plantas_v3", fg="#777").pack(side="left", padx=4)
+        self.cmb_lora = ttk.Combobox(f_lora, values=list(self.lora_por_label), state="readonly", width=42)
+        self.cmb_lora.set("Nenhum (sem LoRA)")
+        self.cmb_lora.pack(side="left", padx=4)
+        self.btn_lora = tk.Button(f_lora, text="Atualizar", command=self.carregar_loras)
+        self.btn_lora.pack(side="left", padx=4)
+        self.lora_hint = tk.Label(root, text="LoRA é um estilo treinado; não é a imagem de referência. A referência é o botão 1 acima.",
+                                  anchor="w", fg="#777")
+        self.lora_hint.pack(fill="x", padx=14)
 
         # 4) pasta
         f3 = tk.Frame(root)
@@ -87,6 +93,38 @@ class App:
         self.pbar.pack(fill="x", padx=14, pady=4)
         self.preview = tk.Label(root)
         self.preview.pack(fill="both", expand=True, padx=14, pady=6)
+        self.root.after(500, self.carregar_loras)
+
+    def carregar_loras(self):
+        self.btn_lora.config(state="disabled")
+        self.lora_hint.config(text="Carregando a lista de LoRAs da conta...")
+        threading.Thread(target=self._carregar_loras, daemon=True).start()
+
+    def _carregar_loras(self):
+        try:
+            loras = ag.listar_loras()
+            mapping = {"Nenhum (sem LoRA)": None}
+            for item in loras:
+                label = f'{item["name"]}  (ID {item["id"]})'
+                mapping[label] = item["id"]
+            labels = list(mapping)
+            self.root.after(0, self._aplicar_loras, labels, mapping, None)
+        except Exception as e:
+            self.root.after(0, self._aplicar_loras, ["Nenhum (sem LoRA)"], {"Nenhum (sem LoRA)": None}, str(e))
+
+    def _aplicar_loras(self, labels, mapping, erro):
+        atual = self.cmb_lora.get()
+        self.lora_por_label = mapping
+        self.cmb_lora.config(values=labels)
+        if atual in mapping:
+            self.cmb_lora.set(atual)
+        else:
+            self.cmb_lora.set("Nenhum (sem LoRA)")
+        self.btn_lora.config(state="normal")
+        if erro:
+            self.lora_hint.config(text="LoRA: não consegui carregar a lista. Verifique a chave/Internet e clique em Atualizar.")
+        else:
+            self.lora_hint.config(text=f"LoRA é um estilo treinado; não é a imagem de referência. {max(0,len(labels)-1)} LoRA(s) encontrado(s).")
 
     def escolher_ref(self):
         p = filedialog.askopenfilename(title="Escolha a referência",
@@ -135,7 +173,7 @@ class App:
         if not self.pasta:
             messagebox.showwarning("Falta", "Escolha a pasta de saída.")
             return
-        lora_id = self.ent_lora.get().strip() or None
+        lora_id = self.lora_por_label.get(self.cmb_lora.get())
         self.btn.config(state="disabled")
         self.pbar.start(10)
         threading.Thread(target=self._gerar, args=(prompt, lora_id), daemon=True).start()
