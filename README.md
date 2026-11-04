@@ -8,12 +8,13 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
-Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.1>
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.2>
 
 ---
 
-## Novidades da versão 1.1
+## Novidades da versão 1.2
 
+- Botão **Gerar prompt pela imagem** usando a API **Image to Prompt** do Magnific.
 - Campo **LoRA (opcional)** para usar um estilo treinado na conta Magnific.
 - Campo de prompt começa **vazio**, para evitar gerar com prompt genérico.
 - Correção dos acentos e da codificação UTF-8.
@@ -29,6 +30,8 @@ Repositório público e download: <https://github.com/luizabgk/gera-render-promp
 4. Opcionalmente informa um **ID de LoRA**.
 5. Escolhe a pasta de saída e clica em **GERAR RENDER**.
 6. O JPG é salvo na pasta escolhida.
+
+O botão **Gerar prompt pela imagem** analisa a referência e preenche o campo de prompt automaticamente.
 
 ---
 
@@ -64,13 +67,27 @@ python geraprompt_render.py
 | Campo | O que é |
 |---|---|
 | **Imagem de referência** | imagem que orienta a composição/cena |
-| **Prompt** | cole o texto gerado pelo GeraPrompt |
+| **Prompt** | cole o texto do GeraPrompt ou gere pela imagem |
+| **Gerar prompt pela imagem** | analisa a referência via API Image to Prompt e preenche o prompt |
 | **Proporção** | 16:9, 1:1, 4:3, 3:4, 9:16 ou 3:2 |
 | **Estilo** | modelo do Mystic: `super_real`, `realism`, `fluid`, `zen` ou `flexible` |
 | **LoRA (opcional)** | ID numérico de um LoRA de estilo da sua conta |
 | **Pasta de saída** | onde o JPG será salvo |
 
 **Dica:** use uma referência boa e um prompt curto. O prompt do GeraPrompt já vem otimizado para até ~2.000 caracteres.
+
+---
+
+## Prompt automático pela imagem
+
+O botão **Gerar prompt pela imagem** chama `POST /v1/ai/image-to-prompt` com a imagem de referência, acompanha a tarefa e coloca o texto descritivo no campo de prompt.
+
+- **Vantagem:** parte da própria imagem, sem precisar escrever o prompt do zero.
+- **Cuidado:** o texto gerado descreve o que a IA vê; ele não garante fidelidade geométrica. Revise antes de gerar.
+- **Custo:** a análise usa créditos da API Magnific.
+- **Edição:** depois de gerado, o prompt pode ser alterado normalmente.
+
+Para melhores resultados, use o prompt automático como ponto de partida e acrescente as regras de preservação de geometria do GeraPrompt.
 
 ---
 

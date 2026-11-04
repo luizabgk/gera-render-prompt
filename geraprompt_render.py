@@ -37,13 +37,15 @@ class App:
         tk.Button(f1, text="1. Imagem de referência", width=22, command=self.escolher_ref).pack(side="left")
         self.lbl_ref = tk.Label(f1, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_ref.pack(side="left", padx=8)
+        self.btn_prompt_img = tk.Button(f1, text="Gerar prompt pela imagem", command=self.gerar_prompt_imagem)
+        self.btn_prompt_img.pack(side="right")
 
         # 2) prompt
         tk.Label(root, text="2. Prompt (cole o do GeraPrompt ou digite):", anchor="w").pack(fill="x", padx=14)
         self.txt_prompt = tk.Text(root, height=8, font=("Consolas", 9))
         self.txt_prompt.pack(fill="both", padx=14, pady=4)
         self.txt_prompt.insert("end", PROMPT_PADRAO)
-        tk.Label(root, text="Cole o prompt gerado pelo GeraPrompt. O campo começa vazio de propósito.",
+        tk.Label(root, text="Cole o prompt do GeraPrompt ou use o botão de análise da imagem (consome créditos).",
                  anchor="w", fg="#666").pack(fill="x", padx=14)
 
         # 3) opções
@@ -98,6 +100,32 @@ class App:
         if d:
             self.pasta = d
             self.lbl_pasta.config(text=d)
+
+    def gerar_prompt_imagem(self):
+        if not self.ref:
+            messagebox.showwarning("Falta", "Escolha primeiro uma imagem de referência.")
+            return
+        atual = self.txt_prompt.get("1.0", "end").strip()
+        if atual and not messagebox.askyesno("Substituir prompt?", "Isso vai substituir o prompt atual. Continuar?"):
+            return
+        self.btn_prompt_img.config(state="disabled")
+        self.pbar.start(10)
+        self.status.config(text="Analisando a imagem no Magnific...")
+        threading.Thread(target=self._gerar_prompt_imagem, daemon=True).start()
+
+    def _gerar_prompt_imagem(self):
+        try:
+            prompt = ag.gerar_prompt_por_imagem(self.ref)
+            self.txt_prompt.delete("1.0", "end")
+            self.txt_prompt.insert("end", prompt)
+            self.status.config(text=f"Prompt gerado pela imagem ({len(prompt)} caracteres).")
+            messagebox.showinfo("Prompt gerado", "O prompt descritivo foi colocado no campo de texto. Revise antes de gerar.")
+        except Exception as e:
+            self.status.config(text="Erro: " + str(e))
+            messagebox.showerror("Erro", str(e))
+        finally:
+            self.pbar.stop()
+            self.btn_prompt_img.config(state="normal")
 
     def gerar(self):
         prompt = self.txt_prompt.get("1.0", "end").strip()

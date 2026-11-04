@@ -193,7 +193,7 @@ def gerar_prompt_pelo_geraprompt(modo, config):
 # ---------- API Magnific ----------
 def _post_json(url, payload, timeout=60):
     if not API_KEY:
-        raise SystemExit("ERRO: defina MAGNIFIC_API_KEY (variável de ambiente) antes de gerar.")
+        raise RuntimeError("ERRO: defina MAGNIFIC_API_KEY (variável de ambiente) antes de gerar.")
     req = urllib.request.Request(
         url,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -223,6 +223,39 @@ def upload_imagem(caminho, content_type="image/jpeg"):
     with urllib.request.urlopen(req, timeout=120) as r:
         r.read()
     return asset_url
+
+
+def gerar_prompt_por_imagem(imagem, timeout_s=180):
+    """Analisa uma imagem e devolve um prompt descritivo (API Image to Prompt).
+
+    Aceita caminho local ou URL. Local é enviado pelo endpoint de upload.
+    """
+    image_ref = imagem
+    if os.path.exists(imagem):
+        image_ref = upload_imagem(imagem)
+    resp = _post_json(f"{API_BASE}/v1/ai/image-to-prompt", {"image": image_ref}, timeout=60)
+    d = resp.get("data", resp)
+    task_id = d.get("task_id") or d.get("id")
+    if not task_id:
+        raise RuntimeError("a API não devolveu task_id para Image to Prompt")
+    inicio = time.time()
+    while time.time() - inicio < timeout_s:
+        raw = _get_json(f"{API_BASE}/v1/ai/image-to-prompt/{task_id}")
+        d = raw.get("data", raw)
+        status = str(d.get("status", "")).upper()
+        if status in ("COMPLETED", "SUCCESS", "DONE"):
+            for item in (d.get("generated") or []):
+                if not isinstance(item, str):
+                    continue
+                if item.startswith("http://") or item.startswith("https://"):
+                    with urllib.request.urlopen(item, timeout=60) as r:
+                        return r.read().decode("utf-8", "replace").strip()
+                return item.strip()
+            raise RuntimeError("Image to Prompt concluiu sem texto gerado")
+        if status in ("FAILED", "ERROR", "CANCELED"):
+            raise RuntimeError(f"Image to Prompt falhou: {json.dumps(raw)[:500]}")
+        time.sleep(3)
+    raise RuntimeError("Tempo esgotado aguardando Image to Prompt")
 
 
 ASPECT_MAP = {
@@ -275,9 +308,9 @@ def aguardar(task_id, modelo="mystic", timeout_s=600):
                             break
             return urls[0] if urls else None
         if status in ("FAILED", "ERROR", "CANCELED"):
-            raise SystemExit(f"Tarefa falhou: {json.dumps(raw)[:500]}")
+            raise RuntimeError(f"Tarefa falhou: {json.dumps(raw)[:500]}")
         time.sleep(5)
-    raise SystemExit("Tempo esgotado aguardando a geração.")
+    raise RuntimeError("Tempo esgotado aguardando a geração.")
 
 
 def baixar(url, destino):
@@ -290,7 +323,7 @@ def baixar(url, destino):
 # ---------- CLI ----------
 def main():
     ap = argparse.ArgumentParser(description="Agente GeraPrompt Render")
-    ap.add_argument("acao", choices=["prompt", "gerar"])
+    ap.add_argument("acao", choices=["prompt", "prompt-imagem", "gerar"])
     ap.add_argument("--modo", choices=["planta", "3d"], default="planta")
     ap.add_argument("--base", default="cad", help="cad | r3d | drone | ia")
     ap.add_argument("--enq", default="top", choices=["top", "ob45", "low", "same"])
@@ -302,7 +335,21 @@ def main():
     ap.add_argument("--base-img", default="", help="caminho da planta (modo planta) para usar como base")
     ap.add_argument("--ref-img", default="", help="caminho de uma imagem de referência específica (pasta 3D)")
     ap.add_argument("--lora-id", default="", help="ID opcional de um LoRA de estilo (ex.: 2457071)")
+    ap.add_argument("--imagem-prompt", default="", help="imagem para gerar prompt automático (Image to Prompt)")
     args = ap.parse_args()
+
+    if args.acao == "prompt-imagem":
+        if not args.imagem_prompt or not os.path.exists(args.imagem_prompt):
+            raise SystemExit("ERRO: informe --imagem-prompt com um arquivo existente.")
+        if not API_KEY:
+            raise SystemExit("ERRO: defina MAGNIFIC_API_KEY antes de gerar o prompt.")
+        prompt = gerar_prompt_por_imagem(args.imagem_prompt)
+        print(prompt)
+        saida = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_prompt.txt")
+        with open(saida, "w", encoding="utf-8") as f:
+            f.write(prompt + "\n")
+        print(f"(prompt salvo em {saida})")
+        return
 
     if args.modo == "planta":
         config = {"h.base": args.base, "h.enq": args.enq, "h.formato": args.formato,
