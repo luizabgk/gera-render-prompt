@@ -31,17 +31,19 @@ API_BASE = "https://api.magnific.com"
 API_KEY = os.environ.get("MAGNIFIC_API_KEY", "").strip()
 
 # Pasta das imagens de referência (fonte real: pasta de treinamento)
-KIT_DIR = r"\\192.168.0.201\dados\Internet\Luiza\GERENCIAMENTO IA\TREINAMENTO-3D\3D\_REFERENCIA_MN"
+KIT_DIR = r"\\192.168.0.201\dados\Internet\Luiza\GERENCIAMENTO IA\TREINAMENTO-3D\_REFERENCIA_MN_3D"
 
 REFERENCIAS = {
-    "lake":   "LAGO_deck__e1b95b18.jpg",
-    "lago":   "LAGO_deck__e1b95b18.jpg",
-    "praça":  "PRACA_canteiros__03620cdb.jpg",
-    "praca":  "PRACA_canteiros__03620cdb.jpg",
-    "caminho":"CAMINHO_vegetacao__86e63d2c.jpg",
-    "street": "RUA_avenida__EntreVerdes-17.jpg",
-    "rua":    "RUA_avenida__EntreVerdes-17.jpg",
-    "jardim": "JARDIM_residencial__residencia-jb.jpg",
+    "lake":    "mn_web_1.jpg",
+    "lago":    "mn_web_1.jpg",
+    "praça":   "2009_F_2.jpg",
+    "praca":   "2009_F_2.jpg",
+    "caminho": "mn_web_6.jpg",
+    "street":  "RUA_avenida__EntreVerdes-17.jpg",
+    "rua":     "RUA_avenida__EntreVerdes-17.jpg",
+    "jardim":  "JARDIM_residencial__residencia-jb.jpg",
+    "entrada": "102_NAUTICO_Entrada_24112013_Foto_Henrique_Santos (1).jpg",
+    "entrance":"102_NAUTICO_Entrada_24112013_Foto_Henrique_Santos (1).jpg",
 }
 
 # ---------- textos (do GeraPrompt) ----------
@@ -51,10 +53,10 @@ GEOMETRIA = ("Preservar morfologia urbana, proporções, divisas, largura das vi
 
 PAISAGISMO_MN = (
     "Plantio em blocos e faixas, nunca misturado. Palmeiras altas de tronco fino (royal, coco) "
-    "e bismarckia prateada como acento vertical, em grupos de 3 a 5. írvores de copa ampla "
+    "e bismarckia prateada como acento vertical, em grupos de 3 a 5. Árvores de copa ampla "
     "formando massa verde. Gramado aparado em tapete, sem falhas. Florada em faixa curta: ixora "
     "vermelho-tijolo, amarelo-ouro e rosa; bougainville roxo pontuando as vias. Renques de arbusto "
-    "aparado como estrutura. Proporção aproximada: 30% árvores de copa, 25% palmeiras, 15% gramí­neas, "
+    "aparado como estrutura. Proporção aproximada: 30% árvores de copa, 25% palmeiras, 15% gramíneas, "
     "12% florada, 10% arbustos, 8% gramado. Aplicar apenas onde a base já indica vegetação."
 )
 
@@ -83,10 +85,10 @@ def build_prompt_planta(base, enq="top", formato="same", paisagismo="mn"):
                 "r3d": "o render 3D do projeto",
                 "drone": "a foto aérea de drone do terreno",
                 "ia": "a humanização anterior"}.get(base, "a base")
-    enq_txt = {"top": "em vista superior ortogonal, top view, í¢ngulo de 90 graus",
-               "ob45": "em vista aérea oblí­qua de 45 graus",
-               "low": "em vista aérea oblí­qua baixa, próxima í  linha do horizonte",
-               "same": "no mesmo enquadramento e í¢ngulo de cí¢mera da imagem original"}.get(enq, enq)
+    enq_txt = {"top": "em vista superior ortogonal, top view, ângulo de 90 graus",
+               "ob45": "em vista aérea oblíqua de 45 graus",
+               "low": "em vista aérea oblíqua baixa, próxima à linha do horizonte",
+               "same": "no mesmo enquadramento e ângulo de câmera da imagem original"}.get(enq, enq)
     fmt_txt = {"same": "mantendo exatamente a proporção da base",
                "16:9": "em formato 16:9 horizontal",
                "4:3": "em formato 4:3",
@@ -94,33 +96,33 @@ def build_prompt_planta(base, enq="top", formato="same", paisagismo="mn"):
                "3:4": "em formato 3:4 vertical"}.get(formato, formato)
 
     partes = []
-    partes.append(f"Converter {base_txt} em fotografia aérea real do empreendimento concluí­do, "
+    partes.append(f"Converter {base_txt} em fotografia aérea real do empreendimento concluído, "
                   f"{enq_txt}, {fmt_txt}, com a mesma escala da base, em alta resolução "
-                  f"(mí­nimo 2000 px de largura).")
+                  f"(mínimo 2000 px de largura).")
     partes.append(f"GEOMETRIA\n{GEOMETRIA}")
     partes.append("PAISAGISMO\nA vegetação segue a implantação: fica exatamente onde está na base, "
                   "nem a mais, nem a menos. Preservar posição, espécie, porte e proporção de cada "
                   "árvore, arbusto e área de gramado. Não criar vegetação onde não existe nem omitir "
                   "a existente; arbustos não viram árvores; maciços não viram clareiras.")
     if paisagismo == "mn":
-        partes.append(f"PAISAGISMO DO ESCRITí“RIO\n{PAISAGISMO_MN}")
+        partes.append(f"PAISAGISMO DO ESCRITÓRIO\n{PAISAGISMO_MN}")
     partes.append("LOTEAMENTO E VIAS\nManter todas as áreas de lote como gramado uniforme e realista, "
                   "com textura de grama aparada. Representar todas as estradas e vias com pavimentação "
                   "de asfalto cinza-claro, mantendo alinhamentos e larguras originais. Preservar as "
-                  "linhas de divisão dos lotes com linhas brancas finas e contí­nuas, ní­tidas em todo o "
+                  "linhas de divisão dos lotes com linhas brancas finas e contínuas, nítidas em todo o "
                   "traçado, sem apagar, esmaecer ou deformar.")
     partes.append("ELEMENTOS\nManter a identidade e a quantidade dos equipamentos: quadra de tênis "
-                  "tem piso e linhas de demarcação; quadra de areia tem superfí­cie solta; não converter "
+                  "tem piso e linhas de demarcação; quadra de areia tem superfície solta; não converter "
                   "uma na outra. Nenhum equipamento vira edificação: quadra permanece quadra, com piso "
                   "e linhas, e não se transforma em casa ou piscina. A água existe apenas onde está "
                   "desenhada e tem tom verde-azulado escuro, com margens naturais e reflexo do céu.")
-    partes.append("EDIFICAí‡í•ES\nManter número, posição, planta e cobertura das edificações; não criar "
+    partes.append("EDIFICAÇÕES\nManter número, posição, planta e cobertura das edificações; não criar "
                   "construções, quiosques ou equipamentos adicionais. Nenhuma edificação ocupa área de "
                   "vegetação: onde há maciço arbóreo ou área verde, permanece vegetação.")
     partes.append("ACABAMENTOS\nManter as cores, os padrões e as texturas de telhado já indicados na "
                   "imagem original. Manter os revestimentos já indicados na imagem original.")
     partes.append("LUZ E REALISMO\nAplicar iluminação natural suave, com sombras discretas e realistas. "
-                  "Fotografia aérea ní­tida em toda a extensão da imagem: folhagem com volume, sombras "
+                  "Fotografia aérea nítida em toda a extensão da imagem: folhagem com volume, sombras "
                   "de contato, asfalto com agregado, telha com textura, leve névoa atmosférica; sem "
                   "aspecto de CGI, maquete ou ilustração.")
     return "\n\n".join(partes), NEG_PLANTA
@@ -157,7 +159,10 @@ def escolher_referencia(cena):
     return arquivo, caminho
 
 
-GERAPROMPT_HTML = r"C:\Users\reganati\Desktop\GeraPrompt - Urbanismo.html"
+GERAPROMPT_HTML = os.environ.get(
+    "GERAPROMPT_HTML",
+    r"\\192.168.0.201\dados\Internet\Luiza\GERENCIAMENTO IA\geraprompt\urbanismo.html",
+)
 
 
 def gerar_prompt_pelo_geraprompt(modo, config):
@@ -234,7 +239,7 @@ ASPECT_MAP = {
 }
 
 
-def gerar_no_magnific(prompt, aspect="16:9", estilo="super_real", image_url=None):
+def gerar_no_magnific(prompt, aspect="16:9", estilo="super_real", image_url=None, lora_id=None):
     """Cria a tarefa no Magnific (endpoint Mystic) e devolve o task_id."""
     payload = {
         "prompt": prompt,
@@ -243,6 +248,8 @@ def gerar_no_magnific(prompt, aspect="16:9", estilo="super_real", image_url=None
     }
     if image_url:
         payload["image_url"] = image_url
+    if lora_id:
+        payload["lora_id"] = str(lora_id).strip()
     data = _post_json(f"{API_BASE}/v1/ai/mystic", payload)
     d = data.get("data", data)
     return d.get("task_id") or d.get("id")
@@ -293,7 +300,8 @@ def main():
     ap.add_argument("--paisagismo", default="mn", choices=["mn", "livre"])
     ap.add_argument("--out", default="render_magnific.png")
     ap.add_argument("--base-img", default="", help="caminho da planta (modo planta) para usar como base")
-    ap.add_argument("--ref-img", default="", help="caminho de uma imagem de referência especí­fica (pasta 3D)")
+    ap.add_argument("--ref-img", default="", help="caminho de uma imagem de referência específica (pasta 3D)")
+    ap.add_argument("--lora-id", default="", help="ID opcional de um LoRA de estilo (ex.: 2457071)")
     args = ap.parse_args()
 
     if args.modo == "planta":
@@ -328,7 +336,8 @@ def main():
     print("=" * 70)
     print(neg)
     print("\n" + "=" * 70)
-    print(f"REFERíŠNCIA DE ESTILO: {ref_nome}")
+    print(f"LORA: {args.lora_id or '(nenhum)'}")
+    print(f"REFERÊNCIA DE ESTILO: {ref_nome}")
     print(f"(caminho: {ref_path})")
     print("=" * 70)
 
@@ -357,7 +366,7 @@ def main():
             image_url = upload_imagem(ref_path)
         if image_url:
             print("Imagem enviada (image_url).")
-        task_id = gerar_no_magnific(prompt, args.aspect, image_url=image_url)
+        task_id = gerar_no_magnific(prompt, args.aspect, image_url=image_url, lora_id=args.lora_id or None)
         print(f"task_id: {task_id}")
         url = aguardar(task_id)
         if not url:

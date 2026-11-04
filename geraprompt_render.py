@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 GeraPrompt Render — GUI separada (gerador de CENAS 3D via API do Magnific).
-Não tem ví­nculo com o GeraPrompt HTML.
+Não tem vínculo com o GeraPrompt HTML.
 """
 import os
 import sys
@@ -19,15 +19,14 @@ import geraprompt_agente as ag
 ag.API_KEY = os.environ.get('MAGNIFIC_API_KEY', ag.API_KEY).strip() or ag.API_KEY
 
 
-PROMPT_PADRAO = ("aerial hyperrealist photograph of a high-end tropical gated community, with royal palms, "
-                 "ixora flower beds, manicured lawn, golden hour, photorealistic, 8k")
+PROMPT_PADRAO = ""
 
 
 class App:
     def __init__(self, root):
         self.root = root
         root.title("GeraPrompt Render — gerar cena")
-        root.geometry("760x700")
+        root.geometry("760x750")
         self.ref = ""
         self.pasta = ""
         self.foto = None
@@ -44,6 +43,8 @@ class App:
         self.txt_prompt = tk.Text(root, height=8, font=("Consolas", 9))
         self.txt_prompt.pack(fill="both", padx=14, pady=4)
         self.txt_prompt.insert("end", PROMPT_PADRAO)
+        tk.Label(root, text="Cole o prompt gerado pelo GeraPrompt. O campo começa vazio de propósito.",
+                 anchor="w", fg="#666").pack(fill="x", padx=14)
 
         # 3) opções
         f2 = tk.Frame(root)
@@ -57,10 +58,18 @@ class App:
         self.cmb_estilo.set("super_real")
         self.cmb_estilo.pack(side="left", padx=4)
 
+        # 3b) LoRA opcional
+        f_lora = tk.Frame(root)
+        f_lora.pack(fill="x", padx=14, pady=4)
+        tk.Label(f_lora, text="LoRA (opcional):").pack(side="left")
+        self.ent_lora = tk.Entry(f_lora, width=16)
+        self.ent_lora.pack(side="left", padx=4)
+        tk.Label(f_lora, text="ex.: 2457071 = paisagismo_plantas_v3", fg="#777").pack(side="left", padx=4)
+
         # 4) pasta
         f3 = tk.Frame(root)
         f3.pack(fill="x", padx=14, pady=4)
-        tk.Button(f3, text="3. Pasta de saí­da", width=22, command=self.escolher_pasta).pack(side="left")
+        tk.Button(f3, text="3. Pasta de saída", width=22, command=self.escolher_pasta).pack(side="left")
         self.lbl_pasta = tk.Label(f3, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_pasta.pack(side="left", padx=8)
 
@@ -85,7 +94,7 @@ class App:
             self.lbl_ref.config(text=os.path.basename(p))
 
     def escolher_pasta(self):
-        d = filedialog.askdirectory(title="Pasta de saí­da")
+        d = filedialog.askdirectory(title="Pasta de saída")
         if d:
             self.pasta = d
             self.lbl_pasta.config(text=d)
@@ -96,20 +105,23 @@ class App:
             messagebox.showwarning("Falta", "O prompt está vazio.")
             return
         if not self.pasta:
-            messagebox.showwarning("Falta", "Escolha a pasta de saí­da.")
+            messagebox.showwarning("Falta", "Escolha a pasta de saída.")
             return
+        lora_id = self.ent_lora.get().strip() or None
         self.btn.config(state="disabled")
         self.pbar.start(10)
-        threading.Thread(target=self._gerar, args=(prompt,), daemon=True).start()
+        threading.Thread(target=self._gerar, args=(prompt, lora_id), daemon=True).start()
 
-    def _gerar(self, prompt):
+    def _gerar(self, prompt, lora_id):
         try:
             image_url = None
             if self.ref and os.path.exists(self.ref):
                 self.status.config(text="Enviando a referência...")
                 image_url = ag.upload_imagem(self.ref)
-            self.status.config(text="Gerando no Magnific...")
-            task_id = ag.gerar_no_magnific(prompt, self.cmb_aspect.get(), self.cmb_estilo.get(), image_url)
+            sufixo_lora = (" com LoRA " + lora_id) if lora_id else ""
+            self.status.config(text="Gerando no Magnific" + sufixo_lora + "...")
+            task_id = ag.gerar_no_magnific(prompt, self.cmb_aspect.get(), self.cmb_estilo.get(),
+                                           image_url, lora_id=lora_id)
             url = ag.aguardar(task_id)
             if not url:
                 raise RuntimeError("sem URL de resultado")
