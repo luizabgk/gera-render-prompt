@@ -8,12 +8,13 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
-Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.5>
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.6>
 
 ---
 
-## Novidades da versão 1.5
+## Novidades da versão 1.6
 
+- **Correção do erro 404 ao gerar com Seedream:** o app agora consulta o endpoint correto de status (`/v1/ai/text-to-image/seedream-v5-pro-edit/{task-id}`).
 - Novo motor **Seedream 5 Pro Edit**, agora o padrão para preservar melhor a imagem base.
 - Checkbox **Não expandir lagos/água**: impede o modelo de transformar lago em mar.
 - Fidelidade da estrutura ajustável em 90/95/98.

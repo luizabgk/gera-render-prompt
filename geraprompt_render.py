@@ -322,7 +322,8 @@ class App:
                     resolution=resolution,
                     creative_detailing=18,
                 )
-            url = ag.aguardar(task_id)
+            modelo_aguardar = "text-to-image/seedream-v5-pro-edit" if motor == "seedream" else "mystic"
+            url = ag.aguardar(task_id, modelo=modelo_aguardar)
             if not url:
                 raise RuntimeError("sem URL de resultado")
             nome = "cena_" + datetime.now().strftime("%Y%m%d_%H%M%S")
