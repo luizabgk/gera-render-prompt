@@ -8,13 +8,16 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
-Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.3>
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.4>
 
 ---
 
-## Novidades da versão 1.3
+## Novidades da versão 1.4
 
+- **Imagem de referência agora é enviada como `structure_reference`**, que é o campo oficial do Mystic para preservar traçado/geometria.
 - **LoRA por nome:** o app carrega a lista da conta e mostra `nome (ID ...)`; não é mais preciso decorar números.
+- A interface avisa que LoRA é ignorado quando a imagem é usada como estrutura.
+- Novos controles de **Acabamento** (engine) e **Resolução**.
 - Botão **Gerar prompt pela imagem** usando a API **Image to Prompt** do Magnific.
 - A **imagem de referência** e o **LoRA** agora estão explicados na interface: são coisas diferentes.
 - Campo de prompt começa **vazio**, para evitar gerar com prompt genérico.
@@ -25,7 +28,7 @@ Repositório público e download: <https://github.com/luizabgk/gera-render-promp
 
 ## O que ele faz
 
-1. Você anexa uma **imagem de referência** (planta, foto, render ou cena).
+1. Você anexa uma **imagem de referência** (planta, foto, render ou cena). Ela é enviada como `structure_reference` para preservar o traçado.
 2. Cola o **prompt gerado pelo GeraPrompt**.
 3. Escolhe a **proporção** e o **estilo** do Mystic.
 4. Opcionalmente informa um **ID de LoRA**.
@@ -67,15 +70,38 @@ python geraprompt_render.py
 
 | Campo | O que é |
 |---|---|
-| **Imagem de referência** | imagem que orienta a composição/cena |
+| **Imagem de referência** | imagem base; é enviada como `structure_reference` para preservar o traçado |
 | **Prompt** | cole o texto do GeraPrompt ou gere pela imagem |
 | **Gerar prompt pela imagem** | analisa a referência via API Image to Prompt e preenche o prompt |
 | **Proporção** | 16:9, 1:1, 4:3, 3:4, 9:16 ou 3:2 |
-| **Estilo** | modelo do Mystic: `super_real`, `realism`, `fluid`, `zen` ou `flexible` |
+| **Estilo** | modelo nativo do Mystic: `realism`, `super_real`, `flexible`, `fluid` ou `zen` |
+| **Acabamento** | engine do Mystic: Sharpy, Sparkle, Illusio ou automático |
+| **Resolução** | 1k, 2k ou 4k |
 | **LoRA (opcional)** | escolha pelo nome na lista de estilos treinados da sua conta |
 | **Pasta de saída** | onde o JPG será salvo |
 
 **Dica:** use uma referência boa e um prompt curto. O prompt do GeraPrompt já vem otimizado para até ~2.000 caracteres.
+
+---
+
+## Estilos nativos do Magnific
+
+Não existe um preset nativo chamado "arquitetura hiperrealista". O Mystic tem **modelos** e **engines** gerais. Para arquitetura, a recomendação é:
+
+| Configuração | Quando usar |
+|---|---|
+| `model: realism` | **melhor padrão para arquitetura ampla** e plantas; cor mais natural e menos "cara de IA" |
+| `model: super_real` | máximo realismo em cenas próximas/médias; pode criar artefatos em tomadas muito abertas |
+| `model: flexible` | estudo conceitual, mais HDR/saturado |
+| `model: fluid` | seguir o prompt com mais liberdade criativa |
+| `model: zen` | resultado mais limpo e minimalista |
+| `engine: magnific_sharpy` | fotos, arquitetura e detalhes nítidos |
+| `engine: magnific_illusio` | ilustrações, natureza e aparência mais suave |
+| `engine: magnific_sparkle` | meio-termo realista |
+| `creative_detailing: 20–30` | evita o aspecto excessivamente "AI/HDR" |
+| `structure_strength: 85–95` | segura o traçado da planta |
+
+**Importante:** LoRA e `structure_reference`/`style_reference` não funcionam juntos. A API **ignora o LoRA silenciosamente** quando há referência de estrutura ou estilo. Para fidelidade de planta, use estrutura e deixe o LoRA desligado. Para estilo puro, desmarque a opção de estrutura e use o LoRA.
 
 ---
 

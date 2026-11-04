@@ -19,7 +19,9 @@ Configuração da chave: variável de ambiente MAGNIFIC_API_KEY
 """
 
 import argparse
+import base64
 import json
+import mimetypes
 import os
 import sys
 import time
@@ -292,18 +294,45 @@ ASPECT_MAP = {
 }
 
 
-def gerar_no_magnific(prompt, aspect="16:9", estilo="super_real", image_url=None, lora_id=None):
-    """Cria a tarefa no Magnific (endpoint Mystic) e devolve o task_id."""
+def imagem_para_base64(caminho):
+    """Converte uma imagem local em data URI base64 para a API do Mystic."""
+    mime = mimetypes.guess_type(str(caminho))[0] or "image/jpeg"
+    with open(caminho, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
+def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
+                      structure_path=None, structure_strength=90,
+                      lora_name=None, style_reference_path=None,
+                      adherence=35, hdr=30, engine="magnific_sharpy",
+                      creative_detailing=25, resolution="2k"):
+    """Cria a tarefa no Mystic usando o schema oficial da API.
+
+    - structure_reference: imagem base64 que preserva o traçado/geometria.
+    - styling.styles: LoRA de estilo pelo NOME (não pelo ID).
+    - LoRA é ignorado pela API quando há structure_reference ou style_reference.
+    """
     payload = {
         "prompt": prompt,
         "aspect_ratio": ASPECT_MAP.get(aspect, "widescreen_16_9"),
-        "model": estilo,
+        "resolution": resolution,
+        "engine": engine,
+        "creative_detailing": int(creative_detailing),
     }
-    if image_url:
-        payload["image_url"] = image_url
-    if lora_id:
-        payload["lora_id"] = str(lora_id).strip()
-    data = _post_json(f"{API_BASE}/v1/ai/mystic", payload)
+    if structure_path and os.path.exists(structure_path):
+        payload["structure_reference"] = imagem_para_base64(structure_path)
+        payload["structure_strength"] = int(structure_strength)
+    if style_reference_path and os.path.exists(style_reference_path):
+        payload["style_reference"] = imagem_para_base64(style_reference_path)
+        payload["adherence"] = int(adherence)
+        payload["hdr"] = int(hdr)
+    if lora_name and not structure_path and not style_reference_path:
+        # Com LoRA, deixe o modelo padrão: super_real/fluid/etc. ignoram LoRA.
+        payload["styling"] = {"styles": [{"name": str(lora_name), "strength": 100}]}
+    else:
+        payload["model"] = estilo
+    data = _post_json(f"{API_BASE}/v1/ai/mystic", payload, timeout=120)
     d = data.get("data", data)
     return d.get("task_id") or d.get("id")
 
@@ -354,7 +383,10 @@ def main():
     ap.add_argument("--out", default="render_magnific.png")
     ap.add_argument("--base-img", default="", help="caminho da planta (modo planta) para usar como base")
     ap.add_argument("--ref-img", default="", help="caminho de uma imagem de referência específica (pasta 3D)")
-    ap.add_argument("--lora-id", default="", help="ID opcional de um LoRA de estilo (ex.: 2457071)")
+    ap.add_argument("--lora-name", default="", help="nome de um LoRA de estilo (use GET /v1/ai/loras)")
+    ap.add_argument("--estilo", default="realism", choices=["realism", "super_real", "flexible", "fluid", "zen"])
+    ap.add_argument("--engine", default="magnific_sharpy", choices=["automatic", "magnific_sharpy", "magnific_sparkle", "magnific_illusio"])
+    ap.add_argument("--resolucao", default="2k", choices=["1k", "2k", "4k"])
     ap.add_argument("--imagem-prompt", default="", help="imagem para gerar prompt automático (Image to Prompt)")
     args = ap.parse_args()
 
@@ -403,7 +435,7 @@ def main():
     print("=" * 70)
     print(neg)
     print("\n" + "=" * 70)
-    print(f"LORA: {args.lora_id or '(nenhum)'}")
+    print(f"LORA: {args.lora_name or '(nenhum)'}")
     print(f"REFERÊNCIA DE ESTILO: {ref_nome}")
     print(f"(caminho: {ref_path})")
     print("=" * 70)
@@ -424,16 +456,18 @@ def main():
 
     print("\nGerando no Magnific...")
     try:
-        image_url = None
+        structure_path = None
         if args.modo == "planta" and args.base_img and os.path.exists(args.base_img):
-            print(f"Enviando a base: {args.base_img}...")
-            image_url = upload_imagem(args.base_img)
+            structure_path = args.base_img
+            print(f"Usando como estrutura: {args.base_img}")
         elif os.path.exists(ref_path):
-            print(f"Enviando referência: {ref_nome}...")
-            image_url = upload_imagem(ref_path)
-        if image_url:
-            print("Imagem enviada (image_url).")
-        task_id = gerar_no_magnific(prompt, args.aspect, image_url=image_url, lora_id=args.lora_id or None)
+            structure_path = ref_path
+            print(f"Usando como estrutura: {ref_nome}")
+        task_id = gerar_no_magnific(prompt, args.aspect, args.estilo,
+                                    structure_path=structure_path,
+                                    lora_name=args.lora_name or None,
+                                    engine=args.engine,
+                                    resolution=args.resolucao)
         print(f"task_id: {task_id}")
         url = aguardar(task_id)
         if not url:

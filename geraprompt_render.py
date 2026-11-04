@@ -26,11 +26,19 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title("GeraPrompt Render — gerar cena")
-        root.geometry("760x750")
+        root.geometry("820x810")
         self.ref = ""
         self.pasta = ""
         self.foto = None
         self.lora_por_label = {"Nenhum (sem LoRA)": None}
+        self.usar_estrutura = tk.BooleanVar(value=True)
+        self.engine_map = {
+            "Sharpy (foto/arquitetura)": "magnific_sharpy",
+            "Automático": "automatic",
+            "Sparkle (realista intermediário)": "magnific_sparkle",
+            "Illusio (ilustração/natureza)": "magnific_illusio",
+        }
+        self.lora_count = 0
 
         # 1) referência
         f1 = tk.Frame(root)
@@ -40,6 +48,13 @@ class App:
         self.lbl_ref.pack(side="left", padx=8)
         self.btn_prompt_img = tk.Button(f1, text="Gerar prompt pela imagem", command=self.gerar_prompt_imagem)
         self.btn_prompt_img.pack(side="right")
+        self.chk_estrutura = tk.Checkbutton(
+            root,
+            text="Usar imagem como estrutura (recomendado para preservar o traçado)",
+            variable=self.usar_estrutura,
+            command=self.atualizar_modo_lora,
+        )
+        self.chk_estrutura.pack(fill="x", padx=14)
 
         # 2) prompt
         tk.Label(root, text="2. Prompt (cole o do GeraPrompt ou digite):", anchor="w").pack(fill="x", padx=14)
@@ -57,9 +72,20 @@ class App:
         self.cmb_aspect.set("16:9")
         self.cmb_aspect.pack(side="left", padx=4)
         tk.Label(f2, text="Estilo:").pack(side="left", padx=(14, 0))
-        self.cmb_estilo = ttk.Combobox(f2, values=["super_real", "realism", "fluid", "zen", "flexible"], width=12)
-        self.cmb_estilo.set("super_real")
+        self.cmb_estilo = ttk.Combobox(f2, values=["realism", "super_real", "flexible", "fluid", "zen"], width=12)
+        self.cmb_estilo.set("realism")
         self.cmb_estilo.pack(side="left", padx=4)
+
+        f_opts2 = tk.Frame(root)
+        f_opts2.pack(fill="x", padx=14, pady=4)
+        tk.Label(f_opts2, text="Acabamento:").pack(side="left")
+        self.cmb_engine = ttk.Combobox(f_opts2, values=list(self.engine_map), state="readonly", width=28)
+        self.cmb_engine.set("Sharpy (foto/arquitetura)")
+        self.cmb_engine.pack(side="left", padx=4)
+        tk.Label(f_opts2, text="Resolução:").pack(side="left", padx=(12, 0))
+        self.cmb_resolucao = ttk.Combobox(f_opts2, values=["1k", "2k", "4k"], state="readonly", width=5)
+        self.cmb_resolucao.set("2k")
+        self.cmb_resolucao.pack(side="left", padx=4)
 
         # 3b) LoRA opcional
         f_lora = tk.Frame(root)
@@ -121,10 +147,23 @@ class App:
         else:
             self.cmb_lora.set("Nenhum (sem LoRA)")
         self.btn_lora.config(state="normal")
+        self.lora_count = max(0, len(labels) - 1)
         if erro:
             self.lora_hint.config(text="LoRA: não consegui carregar a lista. Verifique a chave/Internet e clique em Atualizar.")
         else:
-            self.lora_hint.config(text=f"LoRA é um estilo treinado; não é a imagem de referência. {max(0,len(labels)-1)} LoRA(s) encontrado(s).")
+            self.atualizar_modo_lora()
+
+    def atualizar_modo_lora(self):
+        if self.ref and self.usar_estrutura.get():
+            self.cmb_lora.config(state="disabled")
+            self.lora_hint.config(
+                text="Com imagem como estrutura, a API ignora LoRA. O LoRA fica disponível ao desmarcar a opção acima."
+            )
+        else:
+            self.cmb_lora.config(state="readonly")
+            self.lora_hint.config(
+                text=f"LoRA é estilo treinado; não é a imagem de referência. {self.lora_count} LoRA(s) encontrado(s)."
+            )
 
     def escolher_ref(self):
         p = filedialog.askopenfilename(title="Escolha a referência",
@@ -132,6 +171,7 @@ class App:
         if p:
             self.ref = p
             self.lbl_ref.config(text=os.path.basename(p))
+            self.atualizar_modo_lora()
 
     def escolher_pasta(self):
         d = filedialog.askdirectory(title="Pasta de saída")
@@ -173,21 +213,38 @@ class App:
         if not self.pasta:
             messagebox.showwarning("Falta", "Escolha a pasta de saída.")
             return
-        lora_id = self.lora_por_label.get(self.cmb_lora.get())
+        usar_estrutura = bool(self.ref) and self.usar_estrutura.get()
+        structure_path = self.ref if usar_estrutura else None
+        lora_name = None if usar_estrutura else self.lora_por_label.get(self.cmb_lora.get())
+        engine = self.engine_map.get(self.cmb_engine.get(), "magnific_sharpy")
+        resolution = self.cmb_resolucao.get()
         self.btn.config(state="disabled")
         self.pbar.start(10)
-        threading.Thread(target=self._gerar, args=(prompt, lora_id), daemon=True).start()
+        threading.Thread(
+            target=self._gerar,
+            args=(prompt, lora_name, structure_path, engine, resolution),
+            daemon=True,
+        ).start()
 
-    def _gerar(self, prompt, lora_id):
+    def _gerar(self, prompt, lora_name, structure_path, engine, resolution):
         try:
-            image_url = None
-            if self.ref and os.path.exists(self.ref):
-                self.status.config(text="Enviando a referência...")
-                image_url = ag.upload_imagem(self.ref)
-            sufixo_lora = (" com LoRA " + lora_id) if lora_id else ""
-            self.status.config(text="Gerando no Magnific" + sufixo_lora + "...")
-            task_id = ag.gerar_no_magnific(prompt, self.cmb_aspect.get(), self.cmb_estilo.get(),
-                                           image_url, lora_id=lora_id)
+            if structure_path:
+                sufixo = " com estrutura da imagem"
+            elif lora_name:
+                sufixo = " com LoRA " + lora_name
+            else:
+                sufixo = ""
+            self.status.config(text="Gerando no Magnific" + sufixo + "...")
+            task_id = ag.gerar_no_magnific(
+                prompt,
+                self.cmb_aspect.get(),
+                self.cmb_estilo.get(),
+                structure_path=structure_path,
+                structure_strength=90,
+                lora_name=lora_name,
+                engine=engine,
+                resolution=resolution,
+            )
             url = ag.aguardar(task_id)
             if not url:
                 raise RuntimeError("sem URL de resultado")
