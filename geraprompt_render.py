@@ -26,12 +26,17 @@ class App:
     def __init__(self, root):
         self.root = root
         root.title("GeraPrompt Render — gerar cena")
-        root.geometry("820x810")
+        root.geometry("900x860")
         self.ref = ""
         self.pasta = ""
         self.foto = None
         self.lora_por_label = {"Nenhum (sem LoRA)": None}
         self.usar_estrutura = tk.BooleanVar(value=True)
+        self.nao_expandir_agua = tk.BooleanVar(value=True)
+        self.motor_map = {
+            "Seedream 5 Pro Edit (fiel à base)": "seedream",
+            "Mystic (cena 3D/conceito)": "mystic",
+        }
         self.engine_map = {
             "Sharpy (foto/arquitetura)": "magnific_sharpy",
             "Automático": "automatic",
@@ -55,6 +60,12 @@ class App:
             command=self.atualizar_modo_lora,
         )
         self.chk_estrutura.pack(fill="x", padx=14)
+        self.chk_agua = tk.Checkbutton(
+            root,
+            text="Não expandir lagos/água (não transformar lago em mar)",
+            variable=self.nao_expandir_agua,
+        )
+        self.chk_agua.pack(fill="x", padx=14)
 
         # 2) prompt
         tk.Label(root, text="2. Prompt (cole o do GeraPrompt ou digite):", anchor="w").pack(fill="x", padx=14)
@@ -63,6 +74,14 @@ class App:
         self.txt_prompt.insert("end", PROMPT_PADRAO)
         tk.Label(root, text="Cole o prompt do GeraPrompt ou use o botão de análise da imagem (consome créditos).",
                  anchor="w", fg="#666").pack(fill="x", padx=14)
+
+        f_motor = tk.Frame(root)
+        f_motor.pack(fill="x", padx=14, pady=4)
+        tk.Label(f_motor, text="Motor:").pack(side="left")
+        self.cmb_motor = ttk.Combobox(f_motor, values=list(self.motor_map), state="readonly", width=44)
+        self.cmb_motor.set("Seedream 5 Pro Edit (fiel à base)")
+        self.cmb_motor.pack(side="left", padx=4)
+        self.cmb_motor.bind("<<ComboboxSelected>>", lambda e: self.atualizar_motor())
 
         # 3) opções
         f2 = tk.Frame(root)
@@ -78,7 +97,11 @@ class App:
 
         f_opts2 = tk.Frame(root)
         f_opts2.pack(fill="x", padx=14, pady=4)
-        tk.Label(f_opts2, text="Acabamento:").pack(side="left")
+        tk.Label(f_opts2, text="Fidelidade da estrutura:").pack(side="left")
+        self.cmb_estrutura = ttk.Combobox(f_opts2, values=["Máxima (98)", "Alta (95)", "Média (90)"], state="readonly", width=13)
+        self.cmb_estrutura.set("Máxima (98)")
+        self.cmb_estrutura.pack(side="left", padx=4)
+        tk.Label(f_opts2, text="Acabamento:").pack(side="left", padx=(12, 0))
         self.cmb_engine = ttk.Combobox(f_opts2, values=list(self.engine_map), state="readonly", width=28)
         self.cmb_engine.set("Sharpy (foto/arquitetura)")
         self.cmb_engine.pack(side="left", padx=4)
@@ -119,6 +142,7 @@ class App:
         self.pbar.pack(fill="x", padx=14, pady=4)
         self.preview = tk.Label(root)
         self.preview.pack(fill="both", expand=True, padx=14, pady=6)
+        self.atualizar_motor()
         self.root.after(500, self.carregar_loras)
 
     def carregar_loras(self):
@@ -153,8 +177,34 @@ class App:
         else:
             self.atualizar_modo_lora()
 
+    def atualizar_motor(self):
+        motor = self.motor_map.get(self.cmb_motor.get(), "seedream")
+        if motor == "seedream":
+            self.cmb_estilo.config(state="disabled")
+            self.cmb_engine.config(state="disabled")
+            self.cmb_estrutura.config(state="disabled")
+            self.chk_estrutura.config(state="disabled")
+            self.cmb_resolucao.config(values=["2k", "1.5k"])
+            if self.cmb_resolucao.get() not in ("2k", "1.5k"):
+                self.cmb_resolucao.set("2k")
+        else:
+            self.cmb_estilo.config(state="readonly")
+            self.cmb_engine.config(state="readonly")
+            self.cmb_estrutura.config(state="readonly")
+            self.chk_estrutura.config(state="normal")
+            self.cmb_resolucao.config(values=["1k", "2k", "4k"])
+            if self.cmb_resolucao.get() not in ("1k", "2k", "4k"):
+                self.cmb_resolucao.set("2k")
+        self.atualizar_modo_lora()
+
     def atualizar_modo_lora(self):
-        if self.ref and self.usar_estrutura.get():
+        motor = self.motor_map.get(self.cmb_motor.get(), "seedream")
+        if motor == "seedream":
+            self.cmb_lora.config(state="disabled")
+            self.lora_hint.config(
+                text="Seedream preserva melhor a imagem base e não usa LoRA. Para usar LoRA, escolha o motor Mystic."
+            )
+        elif self.ref and self.usar_estrutura.get():
             self.cmb_lora.config(state="disabled")
             self.lora_hint.config(
                 text="Com imagem como estrutura, a API ignora LoRA. O LoRA fica disponível ao desmarcar a opção acima."
@@ -213,38 +263,65 @@ class App:
         if not self.pasta:
             messagebox.showwarning("Falta", "Escolha a pasta de saída.")
             return
+        motor = self.motor_map.get(self.cmb_motor.get(), "seedream")
+        if motor == "seedream" and not self.ref:
+            messagebox.showwarning("Falta", "O motor Seedream precisa de uma imagem de referência.")
+            return
         usar_estrutura = bool(self.ref) and self.usar_estrutura.get()
         structure_path = self.ref if usar_estrutura else None
-        lora_name = None if usar_estrutura else self.lora_por_label.get(self.cmb_lora.get())
+        lora_name = None if usar_estrutura or motor == "seedream" else self.lora_por_label.get(self.cmb_lora.get())
         engine = self.engine_map.get(self.cmb_engine.get(), "magnific_sharpy")
         resolution = self.cmb_resolucao.get()
+        estrutura_label = self.cmb_estrutura.get()
+        structure_strength = 98 if estrutura_label.startswith("Máxima") else (95 if estrutura_label.startswith("Alta") else 90)
+        prompt_geracao = prompt
+        if self.nao_expandir_agua.get():
+            prompt_geracao += (
+                "\n\nCONTROLE DE ÁGUA\nManter lagos, lagoas e espelhos d'água exatamente no contorno, "
+                "área e posição da imagem de estrutura. Não ampliar, não criar mar, oceano, costa, praia "
+                "ou novas margens. A água só pode existir dentro das áreas já desenhadas."
+            )
         self.btn.config(state="disabled")
         self.pbar.start(10)
         threading.Thread(
             target=self._gerar,
-            args=(prompt, lora_name, structure_path, engine, resolution),
+            args=(prompt_geracao, motor, lora_name, structure_path, structure_strength, engine, resolution),
             daemon=True,
         ).start()
 
-    def _gerar(self, prompt, lora_name, structure_path, engine, resolution):
+    def _gerar(self, prompt, motor, lora_name, structure_path, structure_strength, engine, resolution):
         try:
-            if structure_path:
+            if motor == "seedream":
+                sufixo = " com Seedream 5 Pro Edit"
+            elif structure_path:
                 sufixo = " com estrutura da imagem"
             elif lora_name:
                 sufixo = " com LoRA " + lora_name
             else:
                 sufixo = ""
             self.status.config(text="Gerando no Magnific" + sufixo + "...")
-            task_id = ag.gerar_no_magnific(
-                prompt,
-                self.cmb_aspect.get(),
-                self.cmb_estilo.get(),
-                structure_path=structure_path,
-                structure_strength=90,
-                lora_name=lora_name,
-                engine=engine,
-                resolution=resolution,
-            )
+            if motor == "seedream":
+                res_seedream = "1.5k" if resolution == "1k" else "2k"
+                task_id = ag.gerar_no_seedream_edit(
+                    prompt,
+                    self.cmb_aspect.get(),
+                    reference_path=self.ref,
+                    resolution=res_seedream,
+                    thinking_level="high",
+                    seed=12345,
+                )
+            else:
+                task_id = ag.gerar_no_magnific(
+                    prompt,
+                    self.cmb_aspect.get(),
+                    self.cmb_estilo.get(),
+                    structure_path=structure_path,
+                    structure_strength=structure_strength,
+                    lora_name=lora_name,
+                    engine=engine,
+                    resolution=resolution,
+                    creative_detailing=18,
+                )
             url = ag.aguardar(task_id)
             if not url:
                 raise RuntimeError("sem URL de resultado")

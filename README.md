@@ -8,13 +8,16 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
-Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.4>
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.5>
 
 ---
 
-## Novidades da versão 1.4
+## Novidades da versão 1.5
 
-- **Imagem de referência agora é enviada como `structure_reference`**, que é o campo oficial do Mystic para preservar traçado/geometria.
+- Novo motor **Seedream 5 Pro Edit**, agora o padrão para preservar melhor a imagem base.
+- Checkbox **Não expandir lagos/água**: impede o modelo de transformar lago em mar.
+- Fidelidade da estrutura ajustável em 90/95/98.
+- **Imagem de referência agora é enviada como `structure_reference`** no Mystic, ou como `reference_images` no Seedream.
 - **LoRA por nome:** o app carrega a lista da conta e mostra `nome (ID ...)`; não é mais preciso decorar números.
 - A interface avisa que LoRA é ignorado quando a imagem é usada como estrutura.
 - Novos controles de **Acabamento** (engine) e **Resolução**.
@@ -74,6 +77,7 @@ python geraprompt_render.py
 | **Prompt** | cole o texto do GeraPrompt ou gere pela imagem |
 | **Gerar prompt pela imagem** | analisa a referência via API Image to Prompt e preenche o prompt |
 | **Proporção** | 16:9, 1:1, 4:3, 3:4, 9:16 ou 3:2 |
+| **Motor** | `Seedream 5 Pro Edit` (fiel à base) ou `Mystic` (cena 3D/conceito) |
 | **Estilo** | modelo nativo do Mystic: `realism`, `super_real`, `flexible`, `fluid` ou `zen` |
 | **Acabamento** | engine do Mystic: Sharpy, Sparkle, Illusio ou automático |
 | **Resolução** | 1k, 2k ou 4k |
@@ -81,6 +85,15 @@ python geraprompt_render.py
 | **Pasta de saída** | onde o JPG será salvo |
 
 **Dica:** use uma referência boa e um prompt curto. O prompt do GeraPrompt já vem otimizado para até ~2.000 caracteres.
+
+---
+
+## Seedream 5 Pro Edit x Mystic
+
+- **Seedream 5 Pro Edit** — melhor para planta humanizada, alteração de imagem e preservação do desenho. É o motor padrão do app.
+- **Mystic** — melhor para cenas 3D, perspectivas e conceito; aceita `structure_reference`, `style_reference` e engine.
+
+O checkbox **Não expandir lagos/água** acrescenta uma trava explícita no prompt. No teste com uma prancha real, o Seedream manteve o contorno dos lagos e entregou uma planta humanizada com lotes vazios; o Mystic ainda exagerava a água.
 
 ---
 

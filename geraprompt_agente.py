@@ -20,6 +20,7 @@ Configuração da chave: variável de ambiente MAGNIFIC_API_KEY
 
 import argparse
 import base64
+from io import BytesIO
 import json
 import mimetypes
 import os
@@ -294,12 +295,40 @@ ASPECT_MAP = {
 }
 
 
-def imagem_para_base64(caminho):
-    """Converte uma imagem local em data URI base64 para a API do Mystic."""
+def imagem_para_data_uri(caminho, max_bytes=9_500_000, max_side=2048):
+    """Converte imagem local em data URI, comprimindo se necessário."""
+    from PIL import Image
     mime = mimetypes.guess_type(str(caminho))[0] or "image/jpeg"
-    with open(caminho, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("ascii")
-    return f"data:{mime};base64,{b64}"
+    raw = open(caminho, "rb").read()
+    if len(raw) <= max_bytes:
+        return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+    im = Image.open(caminho).convert("RGB")
+    im.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+    buf = BytesIO()
+    im.save(buf, "JPEG", quality=92, optimize=True)
+    raw = buf.getvalue()
+    return "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+
+
+def gerar_no_seedream_edit(prompt, aspect="4:3", reference_path=None,
+                           resolution="2k", thinking_level="high", seed=12345):
+    """Gera/edita com Seedream 5 Pro Edit, preservando melhor a imagem base."""
+    if not reference_path or not os.path.exists(reference_path):
+        raise RuntimeError("Seedream precisa de uma imagem de referência.")
+    if resolution not in ("1.5k", "2k"):
+        resolution = "2k"
+    payload = {
+        "prompt": prompt,
+        "reference_images": [imagem_para_data_uri(reference_path)],
+        "resolution": resolution,
+        "aspect_ratio": ASPECT_MAP.get(aspect, "classic_4_3"),
+        "thinking_level": thinking_level,
+    }
+    if seed is not None:
+        payload["seed"] = int(seed)
+    data = _post_json(f"{API_BASE}/v1/ai/text-to-image/seedream-v5-pro-edit", payload, timeout=180)
+    d = data.get("data", data)
+    return d.get("task_id") or d.get("id")
 
 
 def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
@@ -321,10 +350,10 @@ def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
         "creative_detailing": int(creative_detailing),
     }
     if structure_path and os.path.exists(structure_path):
-        payload["structure_reference"] = imagem_para_base64(structure_path)
+        payload["structure_reference"] = imagem_para_data_uri(structure_path)
         payload["structure_strength"] = int(structure_strength)
     if style_reference_path and os.path.exists(style_reference_path):
-        payload["style_reference"] = imagem_para_base64(style_reference_path)
+        payload["style_reference"] = imagem_para_data_uri(style_reference_path)
         payload["adherence"] = int(adherence)
         payload["hdr"] = int(hdr)
     if lora_name and not structure_path and not style_reference_path:
