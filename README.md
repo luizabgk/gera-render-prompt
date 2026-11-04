@@ -8,6 +8,8 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.1>
+
 ---
 
 ## Novidades da versão 1.1
@@ -89,7 +91,7 @@ LoRAs da conta da Luiza (referência interna):
 | `mn_style_3d` | 2456849 | concluído |
 | `paisagismo_mn_3d_v2` | 2456900 | concluído |
 | `paisagismo_plantas_v3` | 2457071 | concluído |
-| `paisagismo_plantas_v4` | 2458156 | em treinamento |
+| `paisagismo_plantas_v4` | 2458156 | concluído (20 imagens de implantação) |
 
 **Limitação importante:** o LoRA aplica **estilo**, mas o Mystic **não garante a geometria** da planta. Em teste real, o modelo alterou ruas, lotes e criou casas mesmo com prompt de preservação. Para fidelidade de implantação, use o **GeraPrompt + Seedream 5 Pro no Magnific web**.
 
