@@ -4,4 +4,4 @@ build/
 dist/
 .env
 *.key
-releases/*.exe
+
