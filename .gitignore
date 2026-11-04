@@ -5,3 +5,6 @@ dist/
 .env
 *.key
 
+last_prompt.txt
+*.log
+testes/
