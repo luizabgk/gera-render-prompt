@@ -333,7 +333,7 @@ def gerar_no_seedream_edit(prompt, aspect="4:3", reference_path=None,
 
 def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
                       structure_path=None, structure_strength=90,
-                      lora_name=None, style_reference_path=None,
+                      lora_name=None, lora_strength=100, style_reference_path=None,
                       adherence=35, hdr=30, engine="magnific_sharpy",
                       creative_detailing=25, resolution="2k"):
     """Cria a tarefa no Mystic usando o schema oficial da API.
@@ -366,7 +366,7 @@ def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
             except Exception:
                 pass
         # Com LoRA, deixe o modelo padrão: super_real/fluid/etc. ignoram LoRA.
-        payload["styling"] = {"styles": [{"name": lora_name, "strength": 100}]}
+        payload["styling"] = {"styles": [{"name": lora_name, "strength": int(lora_strength)}]}
     else:
         payload["model"] = estilo
     try:

@@ -12,7 +12,7 @@ from datetime import datetime
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageFilter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import geraprompt_agente as ag
@@ -29,10 +29,10 @@ class App:
         root.title("GeraPrompt Render — gerar cena")
         root.geometry("900x860")
         self.ref = ""
+        self.ref_linhas = ""
         self.pasta = ""
         self.foto = None
         self.lora_por_label = {"Nenhum (sem LoRA)": None}
-        self.usar_estrutura = tk.BooleanVar(value=True)
         self.nao_expandir_agua = tk.BooleanVar(value=True)
         self.fila_ui = queue.Queue()
         self.motor_map = {
@@ -46,22 +46,23 @@ class App:
             "Illusio (ilustração/natureza)": "magnific_illusio",
         }
         self.lora_count = 0
+        self.modo_qualidade = tk.BooleanVar(value=True)
 
         # 1) referência
         f1 = tk.Frame(root)
         f1.pack(fill="x", padx=14, pady=8)
-        tk.Button(f1, text="1. Imagem de referência", width=22, command=self.escolher_ref).pack(side="left")
+        tk.Button(f1, text="1. Imagem de referência (estilo)", width=26, command=self.escolher_ref).pack(side="left")
         self.lbl_ref = tk.Label(f1, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_ref.pack(side="left", padx=8)
-        self.btn_prompt_img = tk.Button(f1, text="Gerar prompt pela imagem", command=self.gerar_prompt_imagem)
-        self.btn_prompt_img.pack(side="right")
-        self.chk_estrutura = tk.Checkbutton(
-            root,
-            text="Usar imagem como estrutura (recomendado para preservar o traçado)",
-            variable=self.usar_estrutura,
-            command=self.atualizar_modo_lora,
-        )
-        self.chk_estrutura.pack(fill="x", padx=14)
+        tk.Label(root, text="A imagem de referência entra como estilo no Mystic; não é estrutura de planta.",
+                 anchor="w", fg="#777").pack(fill="x", padx=14)
+        f1b = tk.Frame(root)
+        f1b.pack(fill="x", padx=14, pady=(0, 4))
+        tk.Button(f1b, text="1b. Linhas de lote (opcional)", width=26, command=self.escolher_linhas).pack(side="left")
+        self.lbl_linhas = tk.Label(f1b, text="(nenhuma)", anchor="w", fg="#333")
+        self.lbl_linhas.pack(side="left", padx=8)
+        tk.Label(root, text="Use a planta com divisas para as linhas dos lotes continuarem aparecendo. O estilo fica na referência 1.",
+                 anchor="w", fg="#777").pack(fill="x", padx=14)
         self.chk_agua = tk.Checkbutton(
             root,
             text="Manter lagos e corpos d'água no tamanho e contorno originais",
@@ -74,14 +75,14 @@ class App:
         self.txt_prompt = tk.Text(root, height=8, font=("Consolas", 9))
         self.txt_prompt.pack(fill="both", padx=14, pady=4)
         self.txt_prompt.insert("end", PROMPT_PADRAO)
-        tk.Label(root, text="Cole o prompt do GeraPrompt ou use o botão de análise da imagem (consome créditos).",
+        tk.Label(root, text="Cole o prompt do GeraPrompt ou digite o prompt da cena.",
                  anchor="w", fg="#666").pack(fill="x", padx=14)
 
         f_motor = tk.Frame(root)
         f_motor.pack(fill="x", padx=14, pady=4)
         tk.Label(f_motor, text="Motor:").pack(side="left")
         self.cmb_motor = ttk.Combobox(f_motor, values=list(self.motor_map), state="readonly", width=44)
-        self.cmb_motor.set("Seedream 5 Pro Edit (fiel à base)")
+        self.cmb_motor.set("Mystic (cena 3D/conceito)")
         self.cmb_motor.pack(side="left", padx=4)
         self.cmb_motor.bind("<<ComboboxSelected>>", lambda e: self.atualizar_motor())
 
@@ -99,18 +100,20 @@ class App:
 
         f_opts2 = tk.Frame(root)
         f_opts2.pack(fill="x", padx=14, pady=4)
-        tk.Label(f_opts2, text="Fidelidade da estrutura:").pack(side="left")
-        self.cmb_estrutura = ttk.Combobox(f_opts2, values=["Máxima (98)", "Alta (95)", "Média (90)"], state="readonly", width=13)
-        self.cmb_estrutura.set("Máxima (98)")
-        self.cmb_estrutura.pack(side="left", padx=4)
-        tk.Label(f_opts2, text="Acabamento:").pack(side="left", padx=(12, 0))
+        tk.Label(f_opts2, text="Acabamento:").pack(side="left")
         self.cmb_engine = ttk.Combobox(f_opts2, values=list(self.engine_map), state="readonly", width=28)
         self.cmb_engine.set("Sharpy (foto/arquitetura)")
         self.cmb_engine.pack(side="left", padx=4)
         tk.Label(f_opts2, text="Resolução:").pack(side="left", padx=(12, 0))
-        self.cmb_resolucao = ttk.Combobox(f_opts2, values=["1k", "2k", "4k"], state="readonly", width=5)
+        self.cmb_resolucao = ttk.Combobox(f_opts2, values=["2k", "4k"], state="readonly", width=5)
         self.cmb_resolucao.set("2k")
         self.cmb_resolucao.pack(side="left", padx=4)
+        self.chk_qualidade = tk.Checkbutton(
+            root,
+            text="Qualidade máxima: gerar 2 versões e escolher a mais nítida (2 gerações)",
+            variable=self.modo_qualidade,
+        )
+        self.chk_qualidade.pack(fill="x", padx=14)
 
         # 3b) LoRA opcional
         f_lora = tk.Frame(root)
@@ -124,6 +127,14 @@ class App:
         self.lora_hint = tk.Label(root, text="LoRA é um estilo treinado; não é a imagem de referência. A referência é o botão 1 acima.",
                                   anchor="w", fg="#777")
         self.lora_hint.pack(fill="x", padx=14)
+        f_lora_str = tk.Frame(root)
+        f_lora_str.pack(fill="x", padx=14, pady=(0, 4))
+        tk.Label(f_lora_str, text="Força do LoRA:").pack(side="left")
+        self.cmb_lora_strength = ttk.Combobox(f_lora_str, values=["30", "40", "50", "60", "70", "80"], state="readonly", width=4)
+        self.cmb_lora_strength.set("50")
+        self.cmb_lora_strength.pack(side="left", padx=4)
+        tk.Label(f_lora_str, text="30–60 mantém nitidez; acima de 80 pode dominar o prompt e borrar.",
+                 anchor="w", fg="#777").pack(side="left", padx=8)
 
         # 4) pasta
         f3 = tk.Frame(root)
@@ -136,6 +147,7 @@ class App:
         self.btn = tk.Button(root, text="GERAR RENDER", bg="#d2603a", fg="white",
                              font=("Segoe UI", 14, "bold"), height=2, command=self.gerar)
         self.btn.pack(fill="x", padx=14, pady=10)
+        root.bind("<F5>", self._atalho_atualizar)
 
         # status + preview
         self.status = tk.Label(root, text="Pronto.", anchor="w")
@@ -171,38 +183,25 @@ class App:
                 tipo = item[0]
                 if tipo == "loras":
                     self._aplicar_loras(item[1], item[2], item[3])
-                elif tipo == "prompt_ok":
-                    self._finalizar_prompt_ok(item[1])
-                elif tipo == "prompt_erro":
-                    self._finalizar_prompt_erro(item[1])
+                elif tipo == "status":
+                    self.status.config(text=item[1])
                 elif tipo == "render_ok":
-                    self._finalizar_render_ok(item[1])
+                    self._finalizar_render_ok(item[1], item[2] if len(item) > 2 else "")
                 elif tipo == "render_erro":
                     self._finalizar_render_erro(item[1])
         except queue.Empty:
             pass
         self.root.after(100, self.processar_fila)
 
-    def _finalizar_prompt_ok(self, prompt):
-        self.txt_prompt.delete("1.0", "end")
-        self.txt_prompt.insert("end", prompt)
-        self.status.config(text=f"Prompt gerado pela imagem ({len(prompt)} caracteres).")
-        self.pbar.stop()
-        self.btn_prompt_img.config(state="normal")
-        messagebox.showinfo("Prompt gerado", "O prompt descritivo foi colocado no campo de texto. Revise antes de gerar.")
-
-    def _finalizar_prompt_erro(self, erro):
-        self.status.config(text="Erro: " + erro)
-        self.pbar.stop()
-        self.btn_prompt_img.config(state="normal")
-        messagebox.showerror("Erro", erro)
-
-    def _finalizar_render_ok(self, jpg):
+    def _finalizar_render_ok(self, jpg, nota=""):
         self.status.config(text="Salvo: " + jpg)
         self.mostrar_preview(jpg)
         self.pbar.stop()
         self.btn.config(state="normal")
-        messagebox.showinfo("Pronto", "Cena salva em:\n" + jpg)
+        msg = "Cena salva em:\n" + jpg
+        if nota:
+            msg += "\n\n" + nota
+        messagebox.showinfo("Pronto", msg)
 
     def _finalizar_render_erro(self, erro):
         self.status.config(text="Erro: " + erro)
@@ -230,18 +229,14 @@ class App:
         if motor == "seedream":
             self.cmb_estilo.config(state="disabled")
             self.cmb_engine.config(state="disabled")
-            self.cmb_estrutura.config(state="disabled")
-            self.chk_estrutura.config(state="disabled")
             self.cmb_resolucao.config(values=["2k", "1.5k"])
             if self.cmb_resolucao.get() not in ("2k", "1.5k"):
                 self.cmb_resolucao.set("2k")
         else:
             self.cmb_estilo.config(state="readonly")
             self.cmb_engine.config(state="readonly")
-            self.cmb_estrutura.config(state="readonly")
-            self.chk_estrutura.config(state="normal")
-            self.cmb_resolucao.config(values=["1k", "2k", "4k"])
-            if self.cmb_resolucao.get() not in ("1k", "2k", "4k"):
+            self.cmb_resolucao.config(values=["2k", "4k"])
+            if self.cmb_resolucao.get() not in ("2k", "4k"):
                 self.cmb_resolucao.set("2k")
         self.atualizar_modo_lora()
 
@@ -252,10 +247,10 @@ class App:
             self.lora_hint.config(
                 text="Seedream preserva melhor a imagem base e não usa LoRA. Para usar LoRA, escolha o motor Mystic."
             )
-        elif self.ref and self.usar_estrutura.get():
+        elif self.ref or self.ref_linhas:
             self.cmb_lora.config(state="disabled")
             self.lora_hint.config(
-                text="Com imagem como estrutura, a API ignora LoRA. O LoRA fica disponível ao desmarcar a opção acima."
+                text="Com referência de estilo ou linhas de lote, a API ignora LoRA. Remova essas imagens para usar LoRA."
             )
         else:
             self.cmb_lora.config(state="readonly")
@@ -268,7 +263,30 @@ class App:
                                        filetypes=[("Imagens", "*.png *.jpg *.jpeg *.webp"), ("Todos", "*.*")])
         if p:
             self.ref = p
-            self.lbl_ref.config(text=os.path.basename(p))
+            try:
+                w, h = Image.open(p).size
+            except Exception:
+                w = h = 0
+            aviso = " ⚠ baixa resolução" if min(w, h) and min(w, h) < 1024 else ""
+            self.lbl_ref.config(text=f"{os.path.basename(p)} ({w}x{h}){aviso}")
+            if min(w, h) and min(w, h) < 1024:
+                messagebox.showwarning(
+                    "Referência pequena",
+                    "Esta imagem tem menos de 1024 px no lado menor. Ela pode deixar o resultado mole ou tremido. "
+                    "Prefira uma referência em alta resolução."
+                )
+            self.atualizar_modo_lora()
+
+    def escolher_linhas(self):
+        p = filedialog.askopenfilename(title="Escolha a planta com linhas de lote",
+                                       filetypes=[("Imagens", "*.png *.jpg *.jpeg *.webp"), ("Todos", "*.*")])
+        if p:
+            self.ref_linhas = p
+            try:
+                w, h = Image.open(p).size
+            except Exception:
+                w = h = 0
+            self.lbl_linhas.config(text=f"{os.path.basename(p)} ({w}x{h})")
             self.atualizar_modo_lora()
 
     def escolher_pasta(self):
@@ -277,55 +295,82 @@ class App:
             self.pasta = d
             self.lbl_pasta.config(text=d)
 
-    def gerar_prompt_imagem(self):
-        if not self.ref:
-            messagebox.showwarning("Falta", "Escolha primeiro uma imagem de referência.")
-            return
-        atual = self.txt_prompt.get("1.0", "end").strip()
-        if atual and not messagebox.askyesno("Substituir prompt?", "Isso vai substituir o prompt atual. Continuar?"):
-            return
-        self.btn_prompt_img.config(state="disabled")
-        self.pbar.start(10)
-        self.status.config(text="Analisando a imagem no Magnific...")
-        threading.Thread(target=self._gerar_prompt_imagem, daemon=True).start()
+    @staticmethod
+    def _limpar_prompt(prompt):
+        """Remove bloco de negativo colado por engano; Mystic não aceita negativo."""
+        for marca in ("NEGATIVE PROMPT", "--- NEGATIVE / NEGATIVO ---", "NEGATIVO"):
+            i = prompt.find(marca)
+            if i != -1:
+                return prompt[:i].strip()
+        return prompt
 
-    def _gerar_prompt_imagem(self):
-        try:
-            prompt = ag.gerar_prompt_por_imagem(self.ref)
-            self.fila_ui.put(("prompt_ok", prompt))
-        except Exception as e:
-            self.fila_ui.put(("prompt_erro", str(e)))
+    def _atalho_atualizar(self, event=None):
+        """F5 atualiza a interface e recarrega os dados da conta."""
+        self.status.config(text="Atualizando interface e lista de LoRAs...")
+        self.atualizar_motor()
+        self.carregar_loras()
+        return "break"
 
     def gerar(self):
         prompt = self.txt_prompt.get("1.0", "end").strip()
+        prompt_limpo = self._limpar_prompt(prompt)
+        if prompt_limpo != prompt:
+            prompt = prompt_limpo
+            messagebox.showinfo(
+                "Prompt ajustado",
+                "Removi o bloco de prompt negativo. O Mystic não tem campo de negativo; "
+                "quando esse texto é colado junto, ele vira parte do pedido e pode deixar a imagem ruim."
+            )
         if not prompt:
             messagebox.showwarning("Falta", "O prompt está vazio.")
             return
         if not self.pasta:
             messagebox.showwarning("Falta", "Escolha a pasta de saída.")
             return
-        motor = self.motor_map.get(self.cmb_motor.get(), "seedream")
+        motor = self.motor_map.get(self.cmb_motor.get(), "mystic")
         if motor == "seedream" and not self.ref:
             messagebox.showwarning("Falta", "O motor Seedream precisa de uma imagem de referência.")
             return
-        usar_estrutura = bool(self.ref) and self.usar_estrutura.get()
-        structure_path = self.ref if usar_estrutura else None
-        lora_name = None if usar_estrutura or motor == "seedream" else self.lora_por_label.get(self.cmb_lora.get())
+        if not self.ref:
+            msg_sem_ref = (
+                "Você não selecionou uma imagem de referência de estilo.\n\n"
+                "Sem ela, o Mystic vai inventar a cena e o resultado pode não seguir o prompt."
+            )
+            lora_sel = self.lora_por_label.get(self.cmb_lora.get())
+            if lora_sel:
+                msg_sem_ref += (
+                    f"\n\nLoRA selecionado: {lora_sel}.\n"
+                    "Sem referência, o LoRA pode puxar a cena para outro estilo e ignorar parte do prompt."
+                )
+            msg_sem_ref += "\n\nDeseja continuar mesmo assim?"
+            if not messagebox.askyesno("Sem imagem de referência", msg_sem_ref):
+                return
+        style_ref_path = self.ref or None
+        structure_path = self.ref_linhas or None
+        if motor == "seedream" and structure_path:
+            messagebox.showwarning(
+                "Linhas de lote no Mystic",
+                "O Seedream não usa a referência de estrutura. Para preservar as linhas de lote, use o motor Mystic."
+            )
+            return
+        lora_name = None if style_ref_path or structure_path or motor == "seedream" else self.lora_por_label.get(self.cmb_lora.get())
+        lora_strength = int(self.cmb_lora_strength.get() or 50)
         engine = self.engine_map.get(self.cmb_engine.get(), "magnific_sharpy")
         resolution = self.cmb_resolucao.get()
-        estrutura_label = self.cmb_estrutura.get()
-        structure_strength = 98 if estrutura_label.startswith("Máxima") else (95 if estrutura_label.startswith("Alta") else 90)
+        aspecto = self.cmb_aspect.get()
         prompt_geracao = prompt
         if self.nao_expandir_agua.get():
             prompt_geracao += (
                 "\n\nCONTROLE DE ÁGUA\nManter lagos, lagoas e espelhos d'água exatamente no contorno, "
-                "área e posição da imagem de estrutura. Não ampliar nem criar novos corpos d'água. "
+                "área e posição da imagem de referência. Não ampliar nem criar novos corpos d'água. "
                 "A água só pode existir dentro das áreas já desenhadas."
             )
         if motor == "seedream":
             sufixo = " com Seedream 5 Pro Edit"
-        elif structure_path:
-            sufixo = " com estrutura da imagem"
+        elif style_ref_path and structure_path:
+            sufixo = " com referência de estilo + linhas de lote"
+        elif style_ref_path:
+            sufixo = " com referência de estilo"
         elif lora_name:
             sufixo = " com LoRA " + lora_name
         else:
@@ -335,48 +380,121 @@ class App:
         self.pbar.start(10)
         threading.Thread(
             target=self._gerar,
-            args=(prompt_geracao, motor, lora_name, structure_path, structure_strength, engine, resolution),
+            args=(prompt_geracao, motor, lora_name, lora_strength, style_ref_path, structure_path,
+                  engine, resolution, aspecto, self.ref or None, self.modo_qualidade.get()),
             daemon=True,
         ).start()
 
-    def _gerar(self, prompt, motor, lora_name, structure_path, structure_strength, engine, resolution):
+    @staticmethod
+    def _nitidez(caminho):
         try:
-            if motor == "seedream":
-                res_seedream = "1.5k" if resolution == "1k" else "2k"
-                task_id = ag.gerar_no_seedream_edit(
-                    prompt,
-                    self.cmb_aspect.get(),
-                    reference_path=self.ref,
-                    resolution=res_seedream,
-                    thinking_level="high",
-                    seed=12345,
-                )
-            else:
-                task_id = ag.gerar_no_magnific(
-                    prompt,
-                    self.cmb_aspect.get(),
-                    self.cmb_estilo.get(),
-                    structure_path=structure_path,
-                    structure_strength=structure_strength,
-                    lora_name=lora_name,
-                    engine=engine,
-                    resolution=resolution,
-                    creative_detailing=18,
-                )
-            modelo_aguardar = "text-to-image/seedream-v5-pro-edit" if motor == "seedream" else "mystic"
-            url = ag.aguardar(task_id, modelo=modelo_aguardar)
-            if not url:
-                raise RuntimeError("sem URL de resultado")
-            nome = "cena_" + datetime.now().strftime("%Y%m%d_%H%M%S")
-            tmp = os.path.join(self.pasta, nome + ".png")
-            jpg = os.path.join(self.pasta, nome + ".jpg")
-            ag.baixar(url, tmp)
-            Image.open(tmp).convert("RGB").save(jpg, "JPEG", quality=95)
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-            self.fila_ui.put(("render_ok", jpg))
+            import numpy as np
+            im = Image.open(caminho).convert("L")
+            im.thumbnail((1024, 1024))
+            a = np.asarray(im, dtype=np.float32)
+            lap = (-4 * a[1:-1, 1:-1] + a[:-2, 1:-1] + a[2:, 1:-1]
+                   + a[1:-1, :-2] + a[1:-1, 2:])
+            return float(lap.var())
+        except Exception:
+            return 0.0
+
+    def _gerar_candidato(self, prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
+                         engine, resolution, aspecto, ref_image, versao):
+        if motor == "seedream":
+            res_seedream = "1.5k" if resolution == "1k" else "2k"
+            task_id = ag.gerar_no_seedream_edit(
+                prompt,
+                aspecto,
+                reference_path=ref_image,
+                resolution=res_seedream,
+                thinking_level="high",
+                seed=12345 + versao,
+            )
+        else:
+            task_id = ag.gerar_no_magnific(
+                prompt,
+                aspecto,
+                self.cmb_estilo.get(),
+                structure_path=structure_path,
+                structure_strength=95,
+                style_reference_path=style_ref_path,
+                adherence=45,
+                hdr=30,
+                lora_name=lora_name,
+                lora_strength=lora_strength,
+                engine=engine,
+                resolution=resolution,
+                creative_detailing=38 if lora_name else 28,
+            )
+        modelo_aguardar = "text-to-image/seedream-v5-pro-edit" if motor == "seedream" else "mystic"
+        url = ag.aguardar(task_id, modelo=modelo_aguardar)
+        if not url:
+            raise RuntimeError("sem URL de resultado")
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        tmp = os.path.join(self.pasta, f"cena_{stamp}_v{versao}.png")
+        jpg = os.path.join(self.pasta, f"cena_{stamp}_v{versao}.jpg")
+        ag.baixar(url, tmp)
+        im = Image.open(tmp).convert("RGB")
+        im = im.filter(ImageFilter.UnsharpMask(radius=1.0, percent=90, threshold=3))
+        im.save(jpg, "JPEG", quality=95, optimize=True)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        score = self._nitidez(jpg)
+        return {"arquivo": jpg, "task_id": task_id, "url": url, "nitidez": score}
+
+    def _gerar(self, prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
+               engine, resolution, aspecto, ref_image, modo_qualidade):
+        try:
+            total = 2 if modo_qualidade else 1
+            candidatos = []
+            erros = []
+            for i in range(1, total + 1):
+                self.fila_ui.put(("status", f"Gerando versão {i}/{total}..."))
+                try:
+                    candidatos.append(self._gerar_candidato(
+                        prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
+                        engine, resolution, aspecto, ref_image, i))
+                except Exception as e:
+                    erros.append(str(e))
+                    self.fila_ui.put(("status", f"Versão {i} falhou: {e}"))
+            if not candidatos:
+                raise RuntimeError("; ".join(erros) if erros else "nenhuma versão gerada")
+            candidatos.sort(key=lambda x: x["nitidez"], reverse=True)
+            melhor = candidatos[0]
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_jpg = os.path.join(self.pasta, f"cena_{stamp}.jpg")
+            os.replace(melhor["arquivo"], final_jpg)
+            # salva a alternativa, se existir
+            alt_jpg = None
+            if len(candidatos) > 1:
+                alt_jpg = os.path.join(self.pasta, f"cena_{stamp}_alternativa.jpg")
+                os.replace(candidatos[1]["arquivo"], alt_jpg)
+            meta = {
+                "data": datetime.now().isoformat(timespec="seconds"),
+                "motor": motor,
+                "estilo": self.cmb_estilo.get(),
+                "engine": engine,
+                "resolucao": resolution,
+                "aspecto": aspecto,
+                "lora": lora_name,
+                "lora_strength": lora_strength if lora_name else None,
+                "referencia": style_ref_path or ref_image,
+                "estrutura_linhas": structure_path,
+                "modo_qualidade": modo_qualidade,
+                "prompt": prompt,
+                "candidatos": candidatos,
+                "arquivo_final": final_jpg,
+                "arquivo_alternativo": alt_jpg,
+            }
+            with open(os.path.join(self.pasta, f"cena_{stamp}.json"), "w", encoding="utf-8") as f:
+                import json
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+            nota = f"Nitidez escolhida: {melhor['nitidez']:.1f}"
+            if alt_jpg:
+                nota += f"\nAlternativa salva em: {alt_jpg}"
+            self.fila_ui.put(("render_ok", final_jpg, nota))
         except Exception as e:
             self.fila_ui.put(("render_erro", str(e)))
 

@@ -8,3 +8,4 @@ dist/
 last_prompt.txt
 *.log
 testes/
+*.spec
