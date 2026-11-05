@@ -5,6 +5,7 @@ GeraPrompt Render — GUI separada (gerador de CENAS 3D via API do Magnific).
 Não tem vínculo com o GeraPrompt HTML.
 """
 import os
+import queue
 import sys
 import threading
 from datetime import datetime
@@ -33,6 +34,7 @@ class App:
         self.lora_por_label = {"Nenhum (sem LoRA)": None}
         self.usar_estrutura = tk.BooleanVar(value=True)
         self.nao_expandir_agua = tk.BooleanVar(value=True)
+        self.fila_ui = queue.Queue()
         self.motor_map = {
             "Seedream 5 Pro Edit (fiel à base)": "seedream",
             "Mystic (cena 3D/conceito)": "mystic",
@@ -143,6 +145,7 @@ class App:
         self.preview = tk.Label(root)
         self.preview.pack(fill="both", expand=True, padx=14, pady=6)
         self.atualizar_motor()
+        self.root.after(100, self.processar_fila)
         self.root.after(500, self.carregar_loras)
 
     def carregar_loras(self):
@@ -157,10 +160,55 @@ class App:
             for item in loras:
                 label = f'{item["name"]}  (ID {item["id"]})'
                 mapping[label] = item["name"]
-            labels = list(mapping)
-            self.root.after(0, self._aplicar_loras, labels, mapping, None)
+            self.fila_ui.put(("loras", list(mapping), mapping, None))
         except Exception as e:
-            self.root.after(0, self._aplicar_loras, ["Nenhum (sem LoRA)"], {"Nenhum (sem LoRA)": None}, str(e))
+            self.fila_ui.put(("loras", ["Nenhum (sem LoRA)"], {"Nenhum (sem LoRA)": None}, str(e)))
+
+    def processar_fila(self):
+        try:
+            while True:
+                item = self.fila_ui.get_nowait()
+                tipo = item[0]
+                if tipo == "loras":
+                    self._aplicar_loras(item[1], item[2], item[3])
+                elif tipo == "prompt_ok":
+                    self._finalizar_prompt_ok(item[1])
+                elif tipo == "prompt_erro":
+                    self._finalizar_prompt_erro(item[1])
+                elif tipo == "render_ok":
+                    self._finalizar_render_ok(item[1])
+                elif tipo == "render_erro":
+                    self._finalizar_render_erro(item[1])
+        except queue.Empty:
+            pass
+        self.root.after(100, self.processar_fila)
+
+    def _finalizar_prompt_ok(self, prompt):
+        self.txt_prompt.delete("1.0", "end")
+        self.txt_prompt.insert("end", prompt)
+        self.status.config(text=f"Prompt gerado pela imagem ({len(prompt)} caracteres).")
+        self.pbar.stop()
+        self.btn_prompt_img.config(state="normal")
+        messagebox.showinfo("Prompt gerado", "O prompt descritivo foi colocado no campo de texto. Revise antes de gerar.")
+
+    def _finalizar_prompt_erro(self, erro):
+        self.status.config(text="Erro: " + erro)
+        self.pbar.stop()
+        self.btn_prompt_img.config(state="normal")
+        messagebox.showerror("Erro", erro)
+
+    def _finalizar_render_ok(self, jpg):
+        self.status.config(text="Salvo: " + jpg)
+        self.mostrar_preview(jpg)
+        self.pbar.stop()
+        self.btn.config(state="normal")
+        messagebox.showinfo("Pronto", "Cena salva em:\n" + jpg)
+
+    def _finalizar_render_erro(self, erro):
+        self.status.config(text="Erro: " + erro)
+        self.pbar.stop()
+        self.btn.config(state="normal")
+        messagebox.showerror("Erro", erro)
 
     def _aplicar_loras(self, labels, mapping, erro):
         atual = self.cmb_lora.get()
@@ -244,16 +292,9 @@ class App:
     def _gerar_prompt_imagem(self):
         try:
             prompt = ag.gerar_prompt_por_imagem(self.ref)
-            self.txt_prompt.delete("1.0", "end")
-            self.txt_prompt.insert("end", prompt)
-            self.status.config(text=f"Prompt gerado pela imagem ({len(prompt)} caracteres).")
-            messagebox.showinfo("Prompt gerado", "O prompt descritivo foi colocado no campo de texto. Revise antes de gerar.")
+            self.fila_ui.put(("prompt_ok", prompt))
         except Exception as e:
-            self.status.config(text="Erro: " + str(e))
-            messagebox.showerror("Erro", str(e))
-        finally:
-            self.pbar.stop()
-            self.btn_prompt_img.config(state="normal")
+            self.fila_ui.put(("prompt_erro", str(e)))
 
     def gerar(self):
         prompt = self.txt_prompt.get("1.0", "end").strip()
@@ -281,6 +322,15 @@ class App:
                 "área e posição da imagem de estrutura. Não ampliar nem criar novos corpos d'água. "
                 "A água só pode existir dentro das áreas já desenhadas."
             )
+        if motor == "seedream":
+            sufixo = " com Seedream 5 Pro Edit"
+        elif structure_path:
+            sufixo = " com estrutura da imagem"
+        elif lora_name:
+            sufixo = " com LoRA " + lora_name
+        else:
+            sufixo = ""
+        self.status.config(text="Gerando no Magnific" + sufixo + "...")
         self.btn.config(state="disabled")
         self.pbar.start(10)
         threading.Thread(
@@ -291,15 +341,6 @@ class App:
 
     def _gerar(self, prompt, motor, lora_name, structure_path, structure_strength, engine, resolution):
         try:
-            if motor == "seedream":
-                sufixo = " com Seedream 5 Pro Edit"
-            elif structure_path:
-                sufixo = " com estrutura da imagem"
-            elif lora_name:
-                sufixo = " com LoRA " + lora_name
-            else:
-                sufixo = ""
-            self.status.config(text="Gerando no Magnific" + sufixo + "...")
             if motor == "seedream":
                 res_seedream = "1.5k" if resolution == "1k" else "2k"
                 task_id = ag.gerar_no_seedream_edit(
@@ -335,15 +376,9 @@ class App:
                 os.remove(tmp)
             except OSError:
                 pass
-            self.status.config(text="Salvo: " + jpg)
-            self.mostrar_preview(jpg)
-            messagebox.showinfo("Pronto", "Cena salva em:\n" + jpg)
+            self.fila_ui.put(("render_ok", jpg))
         except Exception as e:
-            self.status.config(text="Erro: " + str(e))
-            messagebox.showerror("Erro", str(e))
-        finally:
-            self.pbar.stop()
-            self.btn.config(state="normal")
+            self.fila_ui.put(("render_erro", str(e)))
 
     def mostrar_preview(self, jpg):
         im = Image.open(jpg)

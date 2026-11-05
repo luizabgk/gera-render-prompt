@@ -8,12 +8,13 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
-Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.8>
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.9>
 
 ---
 
-## Novidades da versão 1.8
+## Novidades da versão 1.9
 
+- **Correção do carregamento de LoRAs:** a lista agora é atualizada pela thread principal do Tkinter, sem travar em Carregando...
 - **Removidas referências a ambientes costeiros** dos prompts do GeraRender.
 - A trava de água agora usa apenas linguagem de contenção: manter lagos e corpos d'água no tamanho e contorno originais, sem criar novos.
 - **Correção do erro 400 no Mystic com LoRA:** o app estava enviando o ID numérico; agora envia o **nome** do LoRA em `styling.styles`.
