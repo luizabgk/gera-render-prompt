@@ -8,17 +8,19 @@ Faz parte do ecossistema **GeraPrompt**:
 
 Os dois são independentes. O prompt vai por copiar/colar.
 
-Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.7>
+Repositório público e download: <https://github.com/luizabgk/gera-render-prompt/releases/tag/v1.8>
 
 ---
 
-## Novidades da versão 1.7
+## Novidades da versão 1.8
 
+- **Removidas referências a ambientes costeiros** dos prompts do GeraRender.
+- A trava de água agora usa apenas linguagem de contenção: manter lagos e corpos d'água no tamanho e contorno originais, sem criar novos.
 - **Correção do erro 400 no Mystic com LoRA:** o app estava enviando o ID numérico; agora envia o **nome** do LoRA em `styling.styles`.
 - Mensagens de erro da API agora mostram o corpo da resposta, facilitando o diagnóstico.
 - **Correção do erro 404 ao gerar com Seedream:** o app agora consulta o endpoint correto de status (`/v1/ai/text-to-image/seedream-v5-pro-edit/{task-id}`).
 - Novo motor **Seedream 5 Pro Edit**, agora o padrão para preservar melhor a imagem base.
-- Checkbox **Não expandir lagos/água**: impede o modelo de transformar lago em mar.
+- Checkbox **Manter lagos e corpos d'água no tamanho e contorno originais**.
 - Fidelidade da estrutura ajustável em 90/95/98.
 - **Imagem de referência agora é enviada como `structure_reference`** no Mystic, ou como `reference_images` no Seedream.
 - **LoRA por nome:** o app carrega a lista da conta e mostra `nome (ID ...)`; não é mais preciso decorar números.

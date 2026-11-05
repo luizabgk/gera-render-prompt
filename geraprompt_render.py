@@ -62,7 +62,7 @@ class App:
         self.chk_estrutura.pack(fill="x", padx=14)
         self.chk_agua = tk.Checkbutton(
             root,
-            text="Não expandir lagos/água (não transformar lago em mar)",
+            text="Manter lagos e corpos d'água no tamanho e contorno originais",
             variable=self.nao_expandir_agua,
         )
         self.chk_agua.pack(fill="x", padx=14)
@@ -278,8 +278,8 @@ class App:
         if self.nao_expandir_agua.get():
             prompt_geracao += (
                 "\n\nCONTROLE DE ÁGUA\nManter lagos, lagoas e espelhos d'água exatamente no contorno, "
-                "área e posição da imagem de estrutura. Não ampliar, não criar mar, oceano, costa, praia "
-                "ou novas margens. A água só pode existir dentro das áreas já desenhadas."
+                "área e posição da imagem de estrutura. Não ampliar nem criar novos corpos d'água. "
+                "A água só pode existir dentro das áreas já desenhadas."
             )
         self.btn.config(state="disabled")
         self.pbar.start(10)
