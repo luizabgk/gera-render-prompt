@@ -156,7 +156,7 @@ class App:
             mapping = {"Nenhum (sem LoRA)": None}
             for item in loras:
                 label = f'{item["name"]}  (ID {item["id"]})'
-                mapping[label] = item["id"]
+                mapping[label] = item["name"]
             labels = list(mapping)
             self.root.after(0, self._aplicar_loras, labels, mapping, None)
         except Exception as e:

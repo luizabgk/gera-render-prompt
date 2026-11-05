@@ -357,11 +357,23 @@ def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
         payload["adherence"] = int(adherence)
         payload["hdr"] = int(hdr)
     if lora_name and not structure_path and not style_reference_path:
+        # A API espera o NOME do estilo, não o ID numérico.
+        lora_name = str(lora_name).strip()
+        if lora_name.isdigit():
+            try:
+                nomes = {str(x.get("id")): x.get("name") for x in listar_loras()}
+                lora_name = nomes.get(lora_name, lora_name)
+            except Exception:
+                pass
         # Com LoRA, deixe o modelo padrão: super_real/fluid/etc. ignoram LoRA.
-        payload["styling"] = {"styles": [{"name": str(lora_name), "strength": 100}]}
+        payload["styling"] = {"styles": [{"name": lora_name, "strength": 100}]}
     else:
         payload["model"] = estilo
-    data = _post_json(f"{API_BASE}/v1/ai/mystic", payload, timeout=120)
+    try:
+        data = _post_json(f"{API_BASE}/v1/ai/mystic", payload, timeout=120)
+    except urllib.error.HTTPError as e:
+        corpo = e.read().decode("utf-8", "replace")[:1200]
+        raise RuntimeError(f"Mystic HTTP {e.code}: {corpo}")
     d = data.get("data", data)
     return d.get("task_id") or d.get("id")
 
