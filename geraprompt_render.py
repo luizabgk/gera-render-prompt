@@ -65,10 +65,11 @@ class App:
                  anchor="w", fg="#777").pack(fill="x", padx=14)
         self.chk_agua = tk.Checkbutton(
             root,
-            text="Manter lagos e corpos d'água no tamanho e contorno originais",
+            text="Manter lagos e corpos d'água no tamanho e contorno originais (só se houver referência)",
             variable=self.nao_expandir_agua,
         )
         self.chk_agua.pack(fill="x", padx=14)
+        self.chk_agua.config(state="disabled")
 
         # 2) prompt
         tk.Label(root, text="2. Prompt (cole o do GeraPrompt ou digite):", anchor="w").pack(fill="x", padx=14)
@@ -269,6 +270,7 @@ class App:
                 w = h = 0
             aviso = " ⚠ baixa resolução" if min(w, h) and min(w, h) < 1024 else ""
             self.lbl_ref.config(text=f"{os.path.basename(p)} ({w}x{h}){aviso}")
+            self.chk_agua.config(state="normal")
             if min(w, h) and min(w, h) < 1024:
                 messagebox.showwarning(
                     "Referência pequena",
@@ -359,7 +361,10 @@ class App:
         resolution = self.cmb_resolucao.get()
         aspecto = self.cmb_aspect.get()
         prompt_geracao = prompt
-        if self.nao_expandir_agua.get():
+        cena_tem_agua = any(t in prompt.lower() for t in (
+            "lake", "lago", "lagoa", "water", "água", "agua", "pool", "piscina", "espelho"
+        ))
+        if self.nao_expandir_agua.get() and self.ref and cena_tem_agua:
             prompt_geracao += (
                 "\n\nCONTROLE DE ÁGUA\nManter lagos, lagoas e espelhos d'água exatamente no contorno, "
                 "área e posição da imagem de referência. Não ampliar nem criar novos corpos d'água. "

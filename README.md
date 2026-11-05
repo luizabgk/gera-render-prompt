@@ -7,13 +7,14 @@ Aplicativo desktop para gerar **cenas 3D, perspectivas e conceitos** de arquitet
 
 Os dois são independentes: o prompt vai por copiar/colar.
 
-Repositório: <https://github.com/luizabgk/gera-render-prompt>
+Repositório: <https://github.com/luizabgk/gera-render-prompt>  
 Executável: `releases/GeraRender.exe`
 
 ---
 
-## Novidades da versão 2.0
+## Novidades da versão 2.1
 
+- **Trava de água corrigida:** só entra quando há imagem de referência e a cena menciona água. Antes, quadras sem referência ganhavam água/piscina inventada.
 - **Prompt negativo é removido automaticamente** se for colado junto no GeraRender. O Mystic não tem campo negativo.
 - Aviso ao gerar sem imagem de referência e quando há LoRA selecionado sem referência.
 - **Qualidade máxima:** gera 2 versões, mede a nitidez e mantém a melhor. A alternativa também é salva.
