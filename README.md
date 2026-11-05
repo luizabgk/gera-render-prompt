@@ -12,9 +12,10 @@ Executável: `releases/GeraRender.exe`
 
 ---
 
-## Novidades da versão 2.1
+## Novidades da versão 2.2
 
 - **Trava de água corrigida:** só entra quando há imagem de referência e a cena menciona água. Antes, quadras sem referência ganhavam água/piscina inventada.
+- **Checagem de conteúdo:** no modo Qualidade máxima, o app analisa as 2 versões com Image to Prompt e rejeita candidata que invente água quando o prompt não pediu água. Isso corrige o caso em que a versão com água foi escolhida só por ter mais nitidez de bordas.
 - **Prompt negativo é removido automaticamente** se for colado junto no GeraRender. O Mystic não tem campo negativo.
 - Aviso ao gerar sem imagem de referência e quando há LoRA selecionado sem referência.
 - **Qualidade máxima:** gera 2 versões, mede a nitidez e mantém a melhor. A alternativa também é salva.
@@ -121,7 +122,8 @@ pyinstaller --noconfirm --clean --onefile --windowed --icon GR.ico --name GeraRe
 | **Estilo** | Modelo nativo do Mystic. |
 | **Acabamento** | Engine do Mystic. |
 | **Resolução** | 2k ou 4k no Mystic; 1.5k ou 2k no Seedream. |
-| **Qualidade máxima** | Gera 2 versões e escolhe a mais nítida. Usa 2 gerações. |
+| **Qualidade máxima** | Gera 2 versões e escolhe a melhor. Usa 2 gerações. |
+| **Verificar conteúdo** | Analisa as versões com Image to Prompt e rejeita água/cena errada. Usa 2 análises extras. |
 | **LoRA** | Estilo treinado na conta Magnific. |
 | **Força do LoRA** | 30–80. Recomendado 30–60. |
 | **Pasta de saída** | Onde o JPG e o JSON serão salvos. |

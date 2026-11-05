@@ -47,6 +47,7 @@ class App:
         }
         self.lora_count = 0
         self.modo_qualidade = tk.BooleanVar(value=True)
+        self.checar_conteudo = tk.BooleanVar(value=True)
 
         # 1) referência
         f1 = tk.Frame(root)
@@ -115,6 +116,12 @@ class App:
             variable=self.modo_qualidade,
         )
         self.chk_qualidade.pack(fill="x", padx=14)
+        self.chk_conteudo = tk.Checkbutton(
+            root,
+            text="Verificar conteúdo: rejeitar água/cena errada (usa 2 análises extras)",
+            variable=self.checar_conteudo,
+        )
+        self.chk_conteudo.pack(fill="x", padx=14)
 
         # 3b) LoRA opcional
         f_lora = tk.Frame(root)
@@ -391,6 +398,27 @@ class App:
         ).start()
 
     @staticmethod
+    def _agua_indevida(prompt, descricao):
+        """Detecta água inventada quando o prompt não pediu água."""
+        termos = (
+            "water", "pool", "lake", "pond", "lagoon", "ocean", "river",
+            "submerged", "piscina", "lago", "lagoa", "água", "agua",
+            "espelho d'água", "espelho d agua",
+        )
+        p = (prompt or "").lower()
+        d = (descricao or "").lower()
+        # remove negacoes de agua do prompt antes de checar se a cena pede agua
+        for neg in (
+            "no water or reflective pool under the court", "no reflective pool",
+            "no water", "no pool", "no lake", "sem água", "sem agua",
+            "sem lago", "sem piscina",
+        ):
+            p = p.replace(neg, " ")
+        if any(t in p for t in termos):
+            return False
+        return any(t in d for t in termos)
+
+    @staticmethod
     def _nitidez(caminho):
         try:
             import numpy as np
@@ -450,7 +478,7 @@ class App:
         return {"arquivo": jpg, "task_id": task_id, "url": url, "nitidez": score}
 
     def _gerar(self, prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
-               engine, resolution, aspecto, ref_image, modo_qualidade):
+               engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo):
         try:
             total = 2 if modo_qualidade else 1
             candidatos = []
@@ -458,15 +486,26 @@ class App:
             for i in range(1, total + 1):
                 self.fila_ui.put(("status", f"Gerando versão {i}/{total}..."))
                 try:
-                    candidatos.append(self._gerar_candidato(
+                    cand = self._gerar_candidato(
                         prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
-                        engine, resolution, aspecto, ref_image, i))
+                        engine, resolution, aspecto, ref_image, i)
+                    cand["descricao"] = ""
+                    cand["agua_indevida"] = False
+                    cand["erro_conteudo"] = None
+                    if checar_conteudo:
+                        self.fila_ui.put(("status", f"Conferindo conteúdo da versão {i}/{total}..."))
+                        try:
+                            cand["descricao"] = ag.gerar_prompt_por_imagem(cand["arquivo"], timeout_s=180)
+                            cand["agua_indevida"] = self._agua_indevida(prompt, cand["descricao"])
+                        except Exception as e:
+                            cand["erro_conteudo"] = str(e)
+                    candidatos.append(cand)
                 except Exception as e:
                     erros.append(str(e))
                     self.fila_ui.put(("status", f"Versão {i} falhou: {e}"))
             if not candidatos:
                 raise RuntimeError("; ".join(erros) if erros else "nenhuma versão gerada")
-            candidatos.sort(key=lambda x: x["nitidez"], reverse=True)
+            candidatos.sort(key=lambda x: (bool(x.get("agua_indevida")), -float(x["nitidez"])))
             melhor = candidatos[0]
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             final_jpg = os.path.join(self.pasta, f"cena_{stamp}.jpg")
@@ -488,6 +527,7 @@ class App:
                 "referencia": style_ref_path or ref_image,
                 "estrutura_linhas": structure_path,
                 "modo_qualidade": modo_qualidade,
+                "checagem_conteudo": checar_conteudo,
                 "prompt": prompt,
                 "candidatos": candidatos,
                 "arquivo_final": final_jpg,
@@ -497,6 +537,8 @@ class App:
                 import json
                 json.dump(meta, f, ensure_ascii=False, indent=2)
             nota = f"Nitidez escolhida: {melhor['nitidez']:.1f}"
+            if melhor.get("agua_indevida"):
+                nota += "\nAtenção: a checagem detectou água indevida nesta versão."
             if alt_jpg:
                 nota += f"\nAlternativa salva em: {alt_jpg}"
             self.fila_ui.put(("render_ok", final_jpg, nota))
