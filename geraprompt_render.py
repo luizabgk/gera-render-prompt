@@ -4,11 +4,14 @@
 GeraPrompt Render — GUI separada (gerador de CENAS 3D via API do Magnific).
 Não tem vínculo com o GeraPrompt HTML.
 """
+import logging
 import os
 import queue
 import sys
 import threading
+import time
 from datetime import datetime
+from pathlib import Path
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -19,6 +22,15 @@ import geraprompt_agente as ag
 
 ag.API_KEY = os.environ.get('MAGNIFIC_API_KEY', ag.API_KEY).strip() or ag.API_KEY
 
+LOG_DIR = Path(os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))) / "GeraPromptRender"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / "gerarender.log"
+logging.basicConfig(
+    filename=str(LOG_FILE),
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    encoding="utf-8",
+)
 
 PROMPT_PADRAO = ""
 
@@ -46,6 +58,9 @@ class App:
             "Illusio (ilustração/natureza)": "magnific_illusio",
         }
         self.lora_count = 0
+        self.gerando = False
+        self.job_id = 0
+        self.tempo_inicio = None
         self.modo_qualidade = tk.BooleanVar(value=True)
         self.checar_conteudo = tk.BooleanVar(value=True)
 
@@ -158,15 +173,44 @@ class App:
         root.bind("<F5>", self._atalho_atualizar)
 
         # status + preview
-        self.status = tk.Label(root, text="Pronto.", anchor="w")
-        self.status.pack(fill="x", padx=14)
+        f_status = tk.Frame(root)
+        f_status.pack(fill="x", padx=14)
+        self.status = tk.Label(f_status, text="Pronto.", anchor="w")
+        self.status.pack(side="left", fill="x", expand=True)
+        tk.Button(f_status, text="Destravar", command=self.destravar).pack(side="right")
         self.pbar = ttk.Progressbar(root, mode="indeterminate")
         self.pbar.pack(fill="x", padx=14, pady=4)
+        self.lbl_tempo = tk.Label(root, text="", anchor="w", fg="#777")
+        self.lbl_tempo.pack(fill="x", padx=14)
         self.preview = tk.Label(root)
         self.preview.pack(fill="both", expand=True, padx=14, pady=6)
         self.atualizar_motor()
         self.root.after(100, self.processar_fila)
+        self.root.after(1000, self._tick_tempo)
         self.root.after(500, self.carregar_loras)
+
+    def _tick_tempo(self):
+        if self.gerando and self.tempo_inicio:
+            segundos = int(time.time() - self.tempo_inicio)
+            self.lbl_tempo.config(text=f"Em andamento: {segundos // 60:02d}:{segundos % 60:02d}")
+        else:
+            self.lbl_tempo.config(text="")
+        self.root.after(1000, self._tick_tempo)
+
+    def _reset_ui(self):
+        self.gerando = False
+        self.tempo_inicio = None
+        try:
+            self.pbar.stop()
+            self.btn.config(state="normal")
+        except Exception:
+            pass
+
+    def destravar(self):
+        self.job_id += 1
+        self._reset_ui()
+        self.status.config(text="Interface destravada. Resultados da geração anterior serão ignorados.")
+        logging.warning("Interface destravada manualmente; job_id=%s", self.job_id)
 
     def carregar_loras(self):
         self.btn_lora.config(state="disabled")
@@ -189,33 +233,68 @@ class App:
             while True:
                 item = self.fila_ui.get_nowait()
                 tipo = item[0]
-                if tipo == "loras":
-                    self._aplicar_loras(item[1], item[2], item[3])
-                elif tipo == "status":
-                    self.status.config(text=item[1])
-                elif tipo == "render_ok":
-                    self._finalizar_render_ok(item[1], item[2] if len(item) > 2 else "")
-                elif tipo == "render_erro":
-                    self._finalizar_render_erro(item[1])
+                try:
+                    if tipo == "loras":
+                        self._aplicar_loras(item[1], item[2], item[3])
+                    elif tipo == "status":
+                        if len(item) >= 3:
+                            if item[1] != self.job_id:
+                                continue
+                            self.status.config(text=item[2])
+                        else:
+                            self.status.config(text=item[1])
+                    elif tipo == "render_ok":
+                        if len(item) >= 4:
+                            job_id, jpg, nota = item[1], item[2], item[3]
+                        else:
+                            job_id, jpg, nota = self.job_id, item[1], ""
+                        if job_id != self.job_id:
+                            continue
+                        self._finalizar_render_ok(jpg, nota)
+                    elif tipo == "render_erro":
+                        if len(item) >= 3:
+                            job_id, erro = item[1], item[2]
+                        else:
+                            job_id, erro = self.job_id, item[1]
+                        if job_id != self.job_id:
+                            continue
+                        self._finalizar_render_erro(erro)
+                except Exception as e:
+                    logging.exception("Erro ao processar item da fila: %r", item)
+                    self.status.config(text=f"Erro interno na interface: {e}")
+                    self._reset_ui()
         except queue.Empty:
             pass
-        self.root.after(100, self.processar_fila)
+        finally:
+            self.root.after(100, self.processar_fila)
 
     def _finalizar_render_ok(self, jpg, nota=""):
-        self.status.config(text="Salvo: " + jpg)
-        self.mostrar_preview(jpg)
-        self.pbar.stop()
-        self.btn.config(state="normal")
+        try:
+            self.status.config(text="Salvo: " + jpg)
+            self.mostrar_preview(jpg)
+        except Exception as e:
+            logging.exception("Falha ao exibir preview: %s", e)
+            self.status.config(text="Imagem salva, mas o preview falhou: " + str(e))
+        finally:
+            self._reset_ui()
         msg = "Cena salva em:\n" + jpg
         if nota:
             msg += "\n\n" + nota
-        messagebox.showinfo("Pronto", msg)
+        try:
+            messagebox.showinfo("Pronto", msg)
+        except Exception:
+            logging.exception("Falha ao exibir mensagem de sucesso")
 
     def _finalizar_render_erro(self, erro):
-        self.status.config(text="Erro: " + erro)
-        self.pbar.stop()
-        self.btn.config(state="normal")
-        messagebox.showerror("Erro", erro)
+        logging.error("Geração falhou: %s", erro)
+        try:
+            self.status.config(text="Erro: " + erro)
+        finally:
+            self._reset_ui()
+        try:
+            messagebox.showerror("Erro", erro)
+        except Exception:
+            logging.exception("Falha ao exibir mensagem de erro")
 
     def _aplicar_loras(self, labels, mapping, erro):
         atual = self.cmb_lora.get()
@@ -321,6 +400,10 @@ class App:
         return "break"
 
     def gerar(self):
+        if self.gerando:
+            self.status.config(text="Já existe uma geração em andamento. Use Destravar se quiser liberar a interface.")
+            return
+
         prompt = self.txt_prompt.get("1.0", "end").strip()
         prompt_limpo = self._limpar_prompt(prompt)
         if prompt_limpo != prompt:
@@ -353,6 +436,7 @@ class App:
                 )
             msg_sem_ref += "\n\nDeseja continuar mesmo assim?"
             if not messagebox.askyesno("Sem imagem de referência", msg_sem_ref):
+                self.status.config(text="Geração cancelada: nenhuma imagem de referência selecionada.")
                 return
         style_ref_path = self.ref or None
         structure_path = self.ref_linhas or None
@@ -367,6 +451,11 @@ class App:
         engine = self.engine_map.get(self.cmb_engine.get(), "magnific_sharpy")
         resolution = self.cmb_resolucao.get()
         aspecto = self.cmb_aspect.get()
+        estilo = self.cmb_estilo.get()
+        pasta = self.pasta
+        ref_image = self.ref or None
+        modo_qualidade = self.modo_qualidade.get()
+        checar_conteudo = self.checar_conteudo.get()
         prompt_geracao = prompt
         cena_tem_agua = any(t in prompt.lower() for t in (
             "lake", "lago", "lagoa", "water", "água", "agua", "pool", "piscina", "espelho"
@@ -387,13 +476,23 @@ class App:
             sufixo = " com LoRA " + lora_name
         else:
             sufixo = ""
+        self.job_id += 1
+        job_id = self.job_id
+        self.gerando = True
+        self.tempo_inicio = time.time()
         self.status.config(text="Gerando no Magnific" + sufixo + "...")
         self.btn.config(state="disabled")
         self.pbar.start(10)
+        logging.info(
+            "INICIO job=%s motor=%s estilo=%s engine=%s res=%s aspecto=%s lora=%s forca=%s ref=%s linhas=%s qualidade=%s checagem=%s pasta=%s",
+            job_id, motor, estilo, engine, resolution, aspecto, lora_name, lora_strength,
+            style_ref_path, structure_path, modo_qualidade, checar_conteudo, pasta,
+        )
         threading.Thread(
             target=self._gerar,
             args=(prompt_geracao, motor, lora_name, lora_strength, style_ref_path, structure_path,
-                  engine, resolution, aspecto, self.ref or None, self.modo_qualidade.get()),
+                  engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo,
+                  job_id, pasta, estilo),
             daemon=True,
         ).start()
 
@@ -407,7 +506,6 @@ class App:
         )
         p = (prompt or "").lower()
         d = (descricao or "").lower()
-        # remove negacoes de agua do prompt antes de checar se a cena pede agua
         for neg in (
             "no water or reflective pool under the court", "no reflective pool",
             "no water", "no pool", "no lake", "sem água", "sem agua",
@@ -431,8 +529,9 @@ class App:
         except Exception:
             return 0.0
 
-    def _gerar_candidato(self, prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
-                         engine, resolution, aspecto, ref_image, versao):
+    def _gerar_candidato(self, prompt, motor, lora_name, lora_strength, style_ref_path,
+                         structure_path, engine, resolution, aspecto, ref_image,
+                         pasta, estilo, versao):
         if motor == "seedream":
             res_seedream = "1.5k" if resolution == "1k" else "2k"
             task_id = ag.gerar_no_seedream_edit(
@@ -447,7 +546,7 @@ class App:
             task_id = ag.gerar_no_magnific(
                 prompt,
                 aspecto,
-                self.cmb_estilo.get(),
+                estilo,
                 structure_path=structure_path,
                 structure_strength=95,
                 style_reference_path=style_ref_path,
@@ -459,13 +558,14 @@ class App:
                 resolution=resolution,
                 creative_detailing=38 if lora_name else 28,
             )
+        logging.info("TASK job_versao=%s motor=%s task_id=%s", versao, motor, task_id)
         modelo_aguardar = "text-to-image/seedream-v5-pro-edit" if motor == "seedream" else "mystic"
         url = ag.aguardar(task_id, modelo=modelo_aguardar)
         if not url:
             raise RuntimeError("sem URL de resultado")
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        tmp = os.path.join(self.pasta, f"cena_{stamp}_v{versao}.png")
-        jpg = os.path.join(self.pasta, f"cena_{stamp}_v{versao}.jpg")
+        tmp = os.path.join(pasta, f"cena_{stamp}_v{versao}.png")
+        jpg = os.path.join(pasta, f"cena_{stamp}_v{versao}.jpg")
         ag.baixar(url, tmp)
         im = Image.open(tmp).convert("RGB")
         im = im.filter(ImageFilter.UnsharpMask(radius=1.0, percent=90, threshold=3))
@@ -475,50 +575,62 @@ class App:
         except OSError:
             pass
         score = self._nitidez(jpg)
+        logging.info("CANDIDATO v%s nitidez=%.2f arquivo=%s", versao, score, jpg)
         return {"arquivo": jpg, "task_id": task_id, "url": url, "nitidez": score}
 
     def _gerar(self, prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
-               engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo):
+               engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo,
+               job_id, pasta, estilo):
         try:
             total = 2 if modo_qualidade else 1
             candidatos = []
             erros = []
             for i in range(1, total + 1):
-                self.fila_ui.put(("status", f"Gerando versão {i}/{total}..."))
+                if job_id != self.job_id:
+                    logging.info("Job %s cancelado antes da versão %s", job_id, i)
+                    return
+                self.fila_ui.put(("status", job_id, f"Gerando versão {i}/{total}..."))
                 try:
                     cand = self._gerar_candidato(
                         prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
-                        engine, resolution, aspecto, ref_image, i)
+                        engine, resolution, aspecto, ref_image, pasta, estilo, i)
                     cand["descricao"] = ""
                     cand["agua_indevida"] = False
                     cand["erro_conteudo"] = None
                     if checar_conteudo:
-                        self.fila_ui.put(("status", f"Conferindo conteúdo da versão {i}/{total}..."))
+                        self.fila_ui.put(("status", job_id, f"Conferindo conteúdo da versão {i}/{total}..."))
                         try:
                             cand["descricao"] = ag.gerar_prompt_por_imagem(cand["arquivo"], timeout_s=180)
                             cand["agua_indevida"] = self._agua_indevida(prompt, cand["descricao"])
+                            logging.info("CONTEUDO v%s agua_indevida=%s", i, cand["agua_indevida"])
                         except Exception as e:
                             cand["erro_conteudo"] = str(e)
+                            logging.warning("Falha na checagem de conteúdo v%s: %s", i, e)
                     candidatos.append(cand)
                 except Exception as e:
                     erros.append(str(e))
-                    self.fila_ui.put(("status", f"Versão {i} falhou: {e}"))
+                    logging.exception("Versão %s falhou", i)
+                    self.fila_ui.put(("status", job_id, f"Versão {i} falhou: {e}"))
+            if job_id != self.job_id:
+                logging.info("Job %s cancelado antes de salvar", job_id)
+                return
             if not candidatos:
                 raise RuntimeError("; ".join(erros) if erros else "nenhuma versão gerada")
             candidatos.sort(key=lambda x: (bool(x.get("agua_indevida")), -float(x["nitidez"])))
             melhor = candidatos[0]
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            final_jpg = os.path.join(self.pasta, f"cena_{stamp}.jpg")
+            final_jpg = os.path.join(pasta, f"cena_{stamp}.jpg")
             os.replace(melhor["arquivo"], final_jpg)
-            # salva a alternativa, se existir
+            melhor["arquivo"] = final_jpg
             alt_jpg = None
             if len(candidatos) > 1:
-                alt_jpg = os.path.join(self.pasta, f"cena_{stamp}_alternativa.jpg")
+                alt_jpg = os.path.join(pasta, f"cena_{stamp}_alternativa.jpg")
                 os.replace(candidatos[1]["arquivo"], alt_jpg)
+                candidatos[1]["arquivo"] = alt_jpg
             meta = {
                 "data": datetime.now().isoformat(timespec="seconds"),
                 "motor": motor,
-                "estilo": self.cmb_estilo.get(),
+                "estilo": estilo,
                 "engine": engine,
                 "resolucao": resolution,
                 "aspecto": aspecto,
@@ -533,7 +645,7 @@ class App:
                 "arquivo_final": final_jpg,
                 "arquivo_alternativo": alt_jpg,
             }
-            with open(os.path.join(self.pasta, f"cena_{stamp}.json"), "w", encoding="utf-8") as f:
+            with open(os.path.join(pasta, f"cena_{stamp}.json"), "w", encoding="utf-8") as f:
                 import json
                 json.dump(meta, f, ensure_ascii=False, indent=2)
             nota = f"Nitidez escolhida: {melhor['nitidez']:.1f}"
@@ -541,9 +653,11 @@ class App:
                 nota += "\nAtenção: a checagem detectou água indevida nesta versão."
             if alt_jpg:
                 nota += f"\nAlternativa salva em: {alt_jpg}"
-            self.fila_ui.put(("render_ok", final_jpg, nota))
+            logging.info("FIM job=%s arquivo=%s nitidez=%.2f alt=%s", job_id, final_jpg, melhor["nitidez"], alt_jpg)
+            self.fila_ui.put(("render_ok", job_id, final_jpg, nota))
         except Exception as e:
-            self.fila_ui.put(("render_erro", str(e)))
+            logging.exception("ERRO job=%s", job_id)
+            self.fila_ui.put(("render_erro", job_id, str(e)))
 
     def mostrar_preview(self, jpg):
         im = Image.open(jpg)

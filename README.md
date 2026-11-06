@@ -12,8 +12,11 @@ Executável: `releases/GeraRender.exe`
 
 ---
 
-## Novidades da versão 2.2
+## Novidades da versão 2.3
 
+- **Estabilidade da interface:** o estilo do Mystic agora é capturado na thread principal; a fila de eventos é resiliente a exceções e o botão **Destravar** recupera a interface sem reiniciar.
+- **Tempo de geração:** a janela mostra um cronômetro enquanto a geração está em andamento.
+- **Log de diagnóstico:** erros e parâmetros são gravados em `%LOCALAPPDATA%\GeraPromptRender\gerarender.log`.
 - **Trava de água corrigida:** só entra quando há imagem de referência e a cena menciona água. Antes, quadras sem referência ganhavam água/piscina inventada.
 - **Checagem de conteúdo:** no modo Qualidade máxima, o app analisa as 2 versões com Image to Prompt e rejeita candidata que invente água quando o prompt não pediu água. Isso corrige o caso em que a versão com água foi escolhida só por ter mais nitidez de bordas.
 - **Prompt negativo é removido automaticamente** se for colado junto no GeraRender. O Mystic não tem campo negativo.
@@ -124,6 +127,7 @@ pyinstaller --noconfirm --clean --onefile --windowed --icon GR.ico --name GeraRe
 | **Resolução** | 2k ou 4k no Mystic; 1.5k ou 2k no Seedream. |
 | **Qualidade máxima** | Gera 2 versões e escolhe a melhor. Usa 2 gerações. |
 | **Verificar conteúdo** | Analisa as versões com Image to Prompt e rejeita água/cena errada. Usa 2 análises extras. |
+| **Destravar** | Libera a interface se uma geração travar. O resultado antigo é ignorado. |
 | **LoRA** | Estilo treinado na conta Magnific. |
 | **Força do LoRA** | 30–80. Recomendado 30–60. |
 | **Pasta de saída** | Onde o JPG e o JSON serão salvos. |
@@ -150,6 +154,7 @@ pyinstaller --noconfirm --clean --onefile --windowed --icon GR.ico --name GeraRe
 | Imagem tremida | Confirme 2k/4k, prompt limpo, referência nítida e força do LoRA entre 30–60. |
 | Linhas de lote desapareceram | Use a planta com divisas em **1b. Linhas de lote**. |
 | Seedream não aceita linhas de lote | Use Mystic para esse recurso. |
+| Geração parece não fazer nada | Veja o cronômetro e o log em `%LOCALAPPDATA%\GeraPromptRender\gerarender.log`; use **Destravar** se necessário. |
 | Erro de água/lago | Mantenha a trava de água ativada e use uma referência com o contorno correto. |
 
 ---
