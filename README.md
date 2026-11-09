@@ -12,8 +12,10 @@ Executável: `releases/GeraRender.exe`
 
 ---
 
-## Novidades da versão 2.3
+## Novidades da versão 2.4
 
+- **Confiabilidade P0:** MIME detectado pelo formato real da imagem, limite de payload ajustado para base64, validação de arquivos antes de gerar e botões para limpar referência/linhas.
+- **Geração fixa:** opção `fixed_generation` no Mystic para repetir o mesmo resultado com os mesmos parâmetros.
 - **Estabilidade da interface:** o estilo do Mystic agora é capturado na thread principal; a fila de eventos é resiliente a exceções e o botão **Destravar** recupera a interface sem reiniciar.
 - **Tempo de geração:** a janela mostra um cronômetro enquanto a geração está em andamento.
 - **Log de diagnóstico:** erros e parâmetros são gravados em `%LOCALAPPDATA%\GeraPromptRender\gerarender.log`.
@@ -127,6 +129,7 @@ pyinstaller --noconfirm --clean --onefile --windowed --icon GR.ico --name GeraRe
 | **Resolução** | 2k ou 4k no Mystic; 1.5k ou 2k no Seedream. |
 | **Qualidade máxima** | Gera 2 versões e escolhe a melhor. Usa 2 gerações. |
 | **Verificar conteúdo** | Analisa as versões com Image to Prompt e rejeita água/cena errada. Usa 2 análises extras. |
+| **Fixar geração** | Mystic: mesmos parâmetros tendem a gerar o mesmo resultado. |
 | **Destravar** | Libera a interface se uma geração travar. O resultado antigo é ignorado. |
 | **LoRA** | Estilo treinado na conta Magnific. |
 | **Força do LoRA** | 30–80. Recomendado 30–60. |
@@ -155,6 +158,7 @@ pyinstaller --noconfirm --clean --onefile --windowed --icon GR.ico --name GeraRe
 | Linhas de lote desapareceram | Use a planta com divisas em **1b. Linhas de lote**. |
 | Seedream não aceita linhas de lote | Use Mystic para esse recurso. |
 | Geração parece não fazer nada | Veja o cronômetro e o log em `%LOCALAPPDATA%\GeraPromptRender\gerarender.log`; use **Destravar** se necessário. |
+| Referência movida ou apagada | O app agora valida o arquivo antes de gerar e avisa; use **Limpar** para trocar. |
 | Erro de água/lago | Mantenha a trava de água ativada e use uma referência com o contorno correto. |
 
 ---

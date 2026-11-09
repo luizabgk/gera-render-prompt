@@ -63,6 +63,7 @@ class App:
         self.tempo_inicio = None
         self.modo_qualidade = tk.BooleanVar(value=True)
         self.checar_conteudo = tk.BooleanVar(value=True)
+        self.fixar_geracao = tk.BooleanVar(value=False)
 
         # 1) referência
         f1 = tk.Frame(root)
@@ -70,6 +71,7 @@ class App:
         tk.Button(f1, text="1. Imagem de referência (estilo)", width=26, command=self.escolher_ref).pack(side="left")
         self.lbl_ref = tk.Label(f1, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_ref.pack(side="left", padx=8)
+        tk.Button(f1, text="Limpar", command=self.limpar_ref).pack(side="left", padx=(0, 4))
         tk.Label(root, text="A imagem de referência entra como estilo no Mystic; não é estrutura de planta.",
                  anchor="w", fg="#777").pack(fill="x", padx=14)
         f1b = tk.Frame(root)
@@ -77,6 +79,7 @@ class App:
         tk.Button(f1b, text="1b. Linhas de lote (opcional)", width=26, command=self.escolher_linhas).pack(side="left")
         self.lbl_linhas = tk.Label(f1b, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_linhas.pack(side="left", padx=8)
+        tk.Button(f1b, text="Limpar", command=self.limpar_linhas).pack(side="left", padx=(0, 4))
         tk.Label(root, text="Use a planta com divisas para as linhas dos lotes continuarem aparecendo. O estilo fica na referência 1.",
                  anchor="w", fg="#777").pack(fill="x", padx=14)
         self.chk_agua = tk.Checkbutton(
@@ -137,6 +140,12 @@ class App:
             variable=self.checar_conteudo,
         )
         self.chk_conteudo.pack(fill="x", padx=14)
+        self.chk_fixar = tk.Checkbutton(
+            root,
+            text="Fixar geração: mesmos parâmetros geram o mesmo resultado (Mystic)",
+            variable=self.fixar_geracao,
+        )
+        self.chk_fixar.pack(fill="x", padx=14)
 
         # 3b) LoRA opcional
         f_lora = tk.Frame(root)
@@ -377,6 +386,28 @@ class App:
             self.lbl_linhas.config(text=f"{os.path.basename(p)} ({w}x{h})")
             self.atualizar_modo_lora()
 
+    def limpar_ref(self):
+        self.ref = ""
+        self.lbl_ref.config(text="(nenhuma)")
+        self.chk_agua.config(state="disabled")
+        self.atualizar_modo_lora()
+        self.status.config(text="Imagem de referência removida.")
+
+    def limpar_linhas(self):
+        self.ref_linhas = ""
+        self.lbl_linhas.config(text="(nenhuma)")
+        self.atualizar_modo_lora()
+        self.status.config(text="Linhas de lote removidas.")
+
+    @staticmethod
+    def _imagem_ok(caminho):
+        try:
+            with Image.open(caminho) as im:
+                im.verify()
+            return True, ""
+        except Exception as e:
+            return False, str(e)
+
     def escolher_pasta(self):
         d = filedialog.askdirectory(title="Pasta de saída")
         if d:
@@ -419,6 +450,21 @@ class App:
         if not self.pasta:
             messagebox.showwarning("Falta", "Escolha a pasta de saída.")
             return
+        if not os.path.isdir(self.pasta):
+            messagebox.showerror("Pasta inválida", "A pasta de saída não existe ou não está acessível.")
+            return
+        if self.ref:
+            ok, erro = self._imagem_ok(self.ref)
+            if not ok:
+                messagebox.showerror("Referência inválida", "A imagem de referência não pôde ser lida:\n" + erro)
+                self.limpar_ref()
+                return
+        if self.ref_linhas:
+            ok, erro = self._imagem_ok(self.ref_linhas)
+            if not ok:
+                messagebox.showerror("Linhas inválidas", "A planta de linhas não pôde ser lida:\n" + erro)
+                self.limpar_linhas()
+                return
         motor = self.motor_map.get(self.cmb_motor.get(), "mystic")
         if motor == "seedream" and not self.ref:
             messagebox.showwarning("Falta", "O motor Seedream precisa de uma imagem de referência.")
@@ -455,6 +501,10 @@ class App:
         pasta = self.pasta
         ref_image = self.ref or None
         modo_qualidade = self.modo_qualidade.get()
+        fixar_geracao = self.fixar_geracao.get()
+        if fixar_geracao and modo_qualidade:
+            modo_qualidade = False
+            self.status.config(text="Geração fixa ativa: gerando 1 versão.")
         checar_conteudo = self.checar_conteudo.get()
         prompt_geracao = prompt
         cena_tem_agua = any(t in prompt.lower() for t in (
@@ -484,15 +534,15 @@ class App:
         self.btn.config(state="disabled")
         self.pbar.start(10)
         logging.info(
-            "INICIO job=%s motor=%s estilo=%s engine=%s res=%s aspecto=%s lora=%s forca=%s ref=%s linhas=%s qualidade=%s checagem=%s pasta=%s",
+            "INICIO job=%s motor=%s estilo=%s engine=%s res=%s aspecto=%s lora=%s forca=%s ref=%s linhas=%s qualidade=%s fixa=%s checagem=%s pasta=%s",
             job_id, motor, estilo, engine, resolution, aspecto, lora_name, lora_strength,
-            style_ref_path, structure_path, modo_qualidade, checar_conteudo, pasta,
+            style_ref_path, structure_path, modo_qualidade, fixar_geracao, checar_conteudo, pasta,
         )
         threading.Thread(
             target=self._gerar,
             args=(prompt_geracao, motor, lora_name, lora_strength, style_ref_path, structure_path,
                   engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo,
-                  job_id, pasta, estilo),
+                  job_id, pasta, estilo, fixar_geracao),
             daemon=True,
         ).start()
 
@@ -531,7 +581,7 @@ class App:
 
     def _gerar_candidato(self, prompt, motor, lora_name, lora_strength, style_ref_path,
                          structure_path, engine, resolution, aspecto, ref_image,
-                         pasta, estilo, versao):
+                         pasta, estilo, versao, fixar_geracao):
         if motor == "seedream":
             res_seedream = "1.5k" if resolution == "1k" else "2k"
             task_id = ag.gerar_no_seedream_edit(
@@ -557,6 +607,7 @@ class App:
                 engine=engine,
                 resolution=resolution,
                 creative_detailing=38 if lora_name else 28,
+                fixed_generation=fixar_geracao,
             )
         logging.info("TASK job_versao=%s motor=%s task_id=%s", versao, motor, task_id)
         modelo_aguardar = "text-to-image/seedream-v5-pro-edit" if motor == "seedream" else "mystic"
@@ -580,7 +631,7 @@ class App:
 
     def _gerar(self, prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
                engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo,
-               job_id, pasta, estilo):
+               job_id, pasta, estilo, fixar_geracao):
         try:
             total = 2 if modo_qualidade else 1
             candidatos = []
@@ -593,7 +644,7 @@ class App:
                 try:
                     cand = self._gerar_candidato(
                         prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
-                        engine, resolution, aspecto, ref_image, pasta, estilo, i)
+                        engine, resolution, aspecto, ref_image, pasta, estilo, i, fixar_geracao)
                     cand["descricao"] = ""
                     cand["agua_indevida"] = False
                     cand["erro_conteudo"] = None
@@ -640,6 +691,7 @@ class App:
                 "estrutura_linhas": structure_path,
                 "modo_qualidade": modo_qualidade,
                 "checagem_conteudo": checar_conteudo,
+                "fixed_generation": fixar_geracao,
                 "prompt": prompt,
                 "candidatos": candidatos,
                 "arquivo_final": final_jpg,

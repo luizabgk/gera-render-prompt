@@ -295,14 +295,31 @@ ASPECT_MAP = {
 }
 
 
-def imagem_para_data_uri(caminho, max_bytes=9_500_000, max_side=2048):
-    """Converte imagem local em data URI, comprimindo se necessário."""
+def imagem_para_data_uri(caminho, max_bytes=7_000_000, max_side=2048):
+    """Converte imagem local em data URI, detectando o formato real.
+
+    O limite considera o arquivo bruto; base64 cresce ~33%, então 7 MB
+    geram um data URI de aproximadamente 9,3 MB.
+    """
     from PIL import Image
-    mime = mimetypes.guess_type(str(caminho))[0] or "image/jpeg"
     raw = open(caminho, "rb").read()
+    mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp", "GIF": "image/gif"}
+    actual_mime = None
+    try:
+        with Image.open(caminho) as teste:
+            actual_mime = mime_map.get((teste.format or "").upper())
+    except Exception:
+        pass
     if len(raw) <= max_bytes:
+        mime = actual_mime or mimetypes.guess_type(str(caminho))[0] or "image/jpeg"
         return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
-    im = Image.open(caminho).convert("RGB")
+    im = Image.open(caminho)
+    if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
+        fundo = Image.new("RGB", im.size, "white")
+        fundo.paste(im.convert("RGBA"), mask=im.convert("RGBA").split()[-1])
+        im = fundo
+    else:
+        im = im.convert("RGB")
     im.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
     buf = BytesIO()
     im.save(buf, "JPEG", quality=92, optimize=True)
@@ -335,7 +352,7 @@ def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
                       structure_path=None, structure_strength=90,
                       lora_name=None, lora_strength=100, style_reference_path=None,
                       adherence=35, hdr=30, engine="magnific_sharpy",
-                      creative_detailing=25, resolution="2k"):
+                      creative_detailing=25, resolution="2k", fixed_generation=False):
     """Cria a tarefa no Mystic usando o schema oficial da API.
 
     - structure_reference: imagem base64 que preserva o traçado/geometria.
@@ -348,6 +365,7 @@ def gerar_no_magnific(prompt, aspect="16:9", estilo="realism",
         "resolution": resolution,
         "engine": engine,
         "creative_detailing": int(creative_detailing),
+        "fixed_generation": bool(fixed_generation),
     }
     if structure_path and os.path.exists(structure_path):
         payload["structure_reference"] = imagem_para_data_uri(structure_path)
