@@ -4,6 +4,7 @@
 GeraPrompt Render — GUI separada (gerador de CENAS 3D via API do Magnific).
 Não tem vínculo com o GeraPrompt HTML.
 """
+import json
 import logging
 import os
 import queue
@@ -33,17 +34,20 @@ logging.basicConfig(
 )
 
 PROMPT_PADRAO = ""
+REF_DIR = Path(r"F:\Internet\Luiza\GERENCIAMENTO IA\geraprompt\referencias")
+REF_MANIFEST = REF_DIR / "manifest.json"
 
 
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("GeraPrompt Render v2.5 — gerar cena")
+        root.title("GeraPrompt Render v2.6 — biblioteca visual")
         root.geometry("900x860")
         self.ref = ""
         self.ref_linhas = ""
         self.pasta = ""
         self.foto = None
+        self._gallery_thumbs = []
         self.lora_por_label = {"Nenhum (sem LoRA)": None}
         self.nao_expandir_agua = tk.BooleanVar(value=True)
         self.fila_ui = queue.Queue()
@@ -69,7 +73,7 @@ class App:
         # 1) referência
         f1 = tk.Frame(root)
         f1.pack(fill="x", padx=14, pady=8)
-        tk.Button(f1, text="1. Imagem de referência (estilo)", width=26, command=self.escolher_ref).pack(side="left")
+        tk.Button(f1, text="1. Biblioteca de referências (estilo)", width=30, command=lambda: self.abrir_biblioteca("ref")).pack(side="left")
         self.lbl_ref = tk.Label(f1, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_ref.pack(side="left", padx=8)
         tk.Button(f1, text="Limpar", command=self.limpar_ref).pack(side="left", padx=(0, 4))
@@ -77,7 +81,7 @@ class App:
                  anchor="w", fg="#777").pack(fill="x", padx=14)
         f1b = tk.Frame(root)
         f1b.pack(fill="x", padx=14, pady=(0, 4))
-        tk.Button(f1b, text="1b. Linhas de lote (opcional)", width=26, command=self.escolher_linhas).pack(side="left")
+        tk.Button(f1b, text="1b. Biblioteca de linhas de lote", width=30, command=lambda: self.abrir_biblioteca("linhas")).pack(side="left")
         self.lbl_linhas = tk.Label(f1b, text="(nenhuma)", anchor="w", fg="#333")
         self.lbl_linhas.pack(side="left", padx=8)
         tk.Button(f1b, text="Limpar", command=self.limpar_linhas).pack(side="left", padx=(0, 4))
@@ -366,6 +370,92 @@ class App:
             self.lora_hint.config(
                 text=f"LoRA é estilo treinado; não é a imagem de referência. {self.lora_count} LoRA(s) encontrado(s)."
             )
+
+    def _biblioteca_itens(self, modo="ref"):
+        itens = []
+        if REF_MANIFEST.exists():
+            try:
+                d = json.loads(REF_MANIFEST.read_text(encoding="utf-8"))
+                for item in d.get("itens", []):
+                    if not item.get("existe", True):
+                        continue
+                    if item.get("status") not in ("approved", "review"):
+                        continue
+                    p = REF_DIR / item.get("arquivo", "")
+                    if not p.exists():
+                        continue
+                    tipo = item.get("tipo", "")
+                    if modo == "ref" and tipo == "estrutura":
+                        continue
+                    if modo == "linhas" and tipo != "estrutura" and "loteamento" not in p.name.lower():
+                        continue
+                    itens.append({"path": p, "label": item.get("preset") or p.stem, "meta": f"{item.get('largura','?')}×{item.get('altura','?')} · {item.get('licenca','')}", "item": item})
+            except Exception:
+                logging.exception("Falha lendo manifesto de referências")
+        if not itens:
+            for p in sorted(REF_DIR.glob("*")):
+                if p.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
+                    continue
+                if modo == "ref" and ("antigo" in p.stem.lower() or "antiga" in p.stem.lower() or "soft" in p.stem.lower() or "ia_" in p.stem.lower() or "linha" in p.stem.lower()):
+                    continue
+                if modo == "linhas" and "linha" not in p.stem.lower() and "planta" not in p.stem.lower():
+                    continue
+                itens.append({"path": p, "label": p.stem, "meta": "arquivo local", "item": {}})
+        return itens
+
+    def abrir_biblioteca(self, modo="ref"):
+        itens = self._biblioteca_itens(modo)
+        top = tk.Toplevel(self.root)
+        top.title("Biblioteca de referências" if modo == "ref" else "Biblioteca de linhas de lote")
+        top.geometry("1120x620")
+        top.transient(self.root)
+        top.grab_set()
+        tk.Label(top, text="Clique em uma miniatura para selecionar", font=("Segoe UI", 15, "bold")).pack(pady=10)
+        grid = tk.Frame(top)
+        grid.pack(fill="both", expand=True, padx=12, pady=4)
+        self._gallery_thumbs = []
+        for idx, info in enumerate(itens):
+            try:
+                im = Image.open(info["path"])
+                im.thumbnail((240, 150), Image.Resampling.LANCZOS)
+                ph = ImageTk.PhotoImage(im)
+                self._gallery_thumbs.append(ph)
+            except Exception:
+                continue
+            cell = tk.Frame(grid, bd=1, relief="solid", padx=5, pady=5)
+            cell.grid(row=idx // 4, column=idx % 4, padx=8, pady=6, sticky="nsew")
+            btn = tk.Button(cell, image=ph, bd=0, cursor="hand2",
+                            command=lambda p=info["path"], t=top: self._selecionar_biblioteca(p, modo, t))
+            btn.pack()
+            tk.Label(cell, text=info["label"], font=("Segoe UI", 9, "bold"), wraplength=240).pack(pady=(4, 1))
+            tk.Label(cell, text=info["meta"], font=("Segoe UI", 8), fg="#777").pack()
+        for c in range(4):
+            grid.columnconfigure(c, weight=1)
+        if not itens:
+            tk.Label(grid, text="Nenhuma referência ativa encontrada.", fg="#999").grid(row=0, column=0, pady=30)
+
+    def _selecionar_biblioteca(self, caminho, modo, top):
+        try:
+            with Image.open(caminho) as im:
+                w, h = im.size
+            if modo == "ref":
+                self.ref = str(caminho)
+                self.lbl_ref.config(text=f"{caminho.name} ({w}x{h})")
+                self.chk_agua.config(state="normal")
+                self.status.config(text="Referência selecionada: " + caminho.name)
+            else:
+                self.ref_linhas = str(caminho)
+                self.lbl_linhas.config(text=f"{caminho.name} ({w}x{h})")
+                self.status.config(text="Linhas de lote selecionadas: " + caminho.name)
+            self.atualizar_modo_lora()
+            logging.info("BIBLIOTECA modo=%s arquivo=%s", modo, caminho)
+        except Exception as e:
+            messagebox.showerror("Referência inválida", str(e))
+        finally:
+            try:
+                top.destroy()
+            except Exception:
+                pass
 
     def escolher_ref(self):
         p = filedialog.askopenfilename(title="Escolha a referência",
