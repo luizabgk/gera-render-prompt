@@ -12,8 +12,9 @@ Executável: `releases/GeraRender.exe`
 
 ---
 
-## Novidades da versão 2.6
+## Novidades da versão 2.7
 
+- **Curadoria de masterplans:** nova biblioteca com implantação com casas, visão geral e malha de lotes, selecionadas do acervo do escritório.
 - **Biblioteca visual de referências:** o botão de referência abre uma galeria com miniaturas; clique na imagem para selecionar, sem procurar arquivo no Windows.
 - **Comparador manual:** quando há 2 versões, o app abre uma janela com as duas imagens e você escolhe qual manter. O `fixed_generation` continua disponível.
 - **Confiabilidade P0:** MIME detectado pelo formato real da imagem, limite de payload ajustado para base64, validação de arquivos antes de gerar e botões para limpar referência/linhas.

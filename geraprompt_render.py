@@ -41,7 +41,7 @@ REF_MANIFEST = REF_DIR / "manifest.json"
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("GeraPrompt Render v2.6 — biblioteca visual")
+        root.title("GeraPrompt Render v2.7 — curadoria de masterplans")
         root.geometry("900x860")
         self.ref = ""
         self.ref_linhas = ""
@@ -87,6 +87,10 @@ class App:
         tk.Button(f1b, text="Limpar", command=self.limpar_linhas).pack(side="left", padx=(0, 4))
         tk.Label(root, text="Use a planta com divisas para as linhas dos lotes continuarem aparecendo. O estilo fica na referência 1.",
                  anchor="w", fg="#777").pack(fill="x", padx=14)
+        f1c = tk.Frame(root)
+        f1c.pack(fill="x", padx=14, pady=(2, 4))
+        tk.Button(f1c, text="1c. Biblioteca de masterplans", width=30, command=lambda: self.abrir_biblioteca("masterplan")).pack(side="left")
+        tk.Label(f1c, text="Curadoria: implantação com casas, visão geral e malha de lotes.", anchor="w", fg="#777").pack(side="left", padx=8)
         self.chk_agua = tk.Checkbutton(
             root,
             text="Manter lagos e corpos d'água no tamanho e contorno originais (só se houver referência)",
@@ -385,9 +389,11 @@ class App:
                     if not p.exists():
                         continue
                     tipo = item.get("tipo", "")
-                    if modo == "ref" and tipo == "estrutura":
+                    if modo == "ref" and (tipo == "estrutura" or item.get("categoria") == "masterplan"):
                         continue
                     if modo == "linhas" and tipo != "estrutura" and "loteamento" not in p.name.lower():
+                        continue
+                    if modo == "masterplan" and item.get("categoria") != "masterplan":
                         continue
                     itens.append({"path": p, "label": item.get("preset") or p.stem, "meta": f"{item.get('largura','?')}×{item.get('altura','?')} · {item.get('licenca','')}", "item": item})
             except Exception:
@@ -400,15 +406,18 @@ class App:
                     continue
                 if modo == "linhas" and "linha" not in p.stem.lower() and "planta" not in p.stem.lower():
                     continue
+                if modo == "masterplan" and "masterplan" not in p.stem.lower():
+                    continue
                 itens.append({"path": p, "label": p.stem, "meta": "arquivo local", "item": {}})
         return itens
 
     def abrir_biblioteca(self, modo="ref"):
         itens = self._biblioteca_itens(modo)
         top = tk.Toplevel(self.root)
-        top.title("Biblioteca de referências" if modo == "ref" else "Biblioteca de linhas de lote")
-        cols = 4 if modo == "ref" else 1
-        top.geometry("1120x620" if modo == "ref" else "760x600")
+        titulos = {"ref": "Biblioteca de referências", "linhas": "Biblioteca de linhas de lote", "masterplan": "Biblioteca de masterplans"}
+        top.title(titulos.get(modo, "Biblioteca"))
+        cols = 4 if modo == "ref" else (1 if modo == "linhas" else 3)
+        top.geometry("1120x620" if modo == "ref" else ("760x600" if modo == "linhas" else "980x760"))
         top.transient(self.root)
         top.grab_set()
         tk.Label(top, text="Clique em uma miniatura para selecionar", font=("Segoe UI", 15, "bold")).pack(pady=10)
@@ -418,7 +427,13 @@ class App:
         for idx, info in enumerate(itens):
             try:
                 im = Image.open(info["path"])
-                im.thumbnail((240, 150) if modo == "ref" else (600, 400), Image.Resampling.LANCZOS)
+                if modo == "ref":
+                    tamanho = (240, 150)
+                elif modo == "linhas":
+                    tamanho = (600, 400)
+                else:
+                    tamanho = (280, 180)
+                im.thumbnail(tamanho, Image.Resampling.LANCZOS)
                 ph = ImageTk.PhotoImage(im)
                 self._gallery_thumbs.append(ph)
             except Exception:
