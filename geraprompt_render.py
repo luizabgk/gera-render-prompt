@@ -407,7 +407,8 @@ class App:
         itens = self._biblioteca_itens(modo)
         top = tk.Toplevel(self.root)
         top.title("Biblioteca de referências" if modo == "ref" else "Biblioteca de linhas de lote")
-        top.geometry("1120x620")
+        cols = 4 if modo == "ref" else 1
+        top.geometry("1120x620" if modo == "ref" else "760x600")
         top.transient(self.root)
         top.grab_set()
         tk.Label(top, text="Clique em uma miniatura para selecionar", font=("Segoe UI", 15, "bold")).pack(pady=10)
@@ -417,19 +418,19 @@ class App:
         for idx, info in enumerate(itens):
             try:
                 im = Image.open(info["path"])
-                im.thumbnail((240, 150), Image.Resampling.LANCZOS)
+                im.thumbnail((240, 150) if modo == "ref" else (600, 400), Image.Resampling.LANCZOS)
                 ph = ImageTk.PhotoImage(im)
                 self._gallery_thumbs.append(ph)
             except Exception:
                 continue
             cell = tk.Frame(grid, bd=1, relief="solid", padx=5, pady=5)
-            cell.grid(row=idx // 4, column=idx % 4, padx=8, pady=6, sticky="nsew")
+            cell.grid(row=idx // cols, column=idx % cols, padx=8, pady=6, sticky="nsew")
             btn = tk.Button(cell, image=ph, bd=0, cursor="hand2",
                             command=lambda p=info["path"], t=top: self._selecionar_biblioteca(p, modo, t))
             btn.pack()
             tk.Label(cell, text=info["label"], font=("Segoe UI", 9, "bold"), wraplength=240).pack(pady=(4, 1))
             tk.Label(cell, text=info["meta"], font=("Segoe UI", 8), fg="#777").pack()
-        for c in range(4):
+        for c in range(cols):
             grid.columnconfigure(c, weight=1)
         if not itens:
             tk.Label(grid, text="Nenhuma referência ativa encontrada.", fg="#999").grid(row=0, column=0, pady=30)
