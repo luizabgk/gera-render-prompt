@@ -12,8 +12,9 @@ Executável: `releases/GeraRender.exe`
 
 ---
 
-## Novidades da versão 2.4
+## Novidades da versão 2.5
 
+- **Comparador manual:** quando há 2 versões, o app abre uma janela com as duas imagens e você escolhe qual manter. O `fixed_generation` continua disponível.
 - **Confiabilidade P0:** MIME detectado pelo formato real da imagem, limite de payload ajustado para base64, validação de arquivos antes de gerar e botões para limpar referência/linhas.
 - **Geração fixa:** opção `fixed_generation` no Mystic para repetir o mesmo resultado com os mesmos parâmetros.
 - **Estabilidade da interface:** o estilo do Mystic agora é capturado na thread principal; a fila de eventos é resiliente a exceções e o botão **Destravar** recupera a interface sem reiniciar.
@@ -129,6 +130,7 @@ pyinstaller --noconfirm --clean --onefile --windowed --icon GR.ico --name GeraRe
 | **Resolução** | 2k ou 4k no Mystic; 1.5k ou 2k no Seedream. |
 | **Qualidade máxima** | Gera 2 versões e escolhe a melhor. Usa 2 gerações. |
 | **Verificar conteúdo** | Analisa as versões com Image to Prompt e rejeita água/cena errada. Usa 2 análises extras. |
+| **Escolher manualmente** | Abre as 2 versões lado a lado para você decidir qual é a melhor. |
 | **Fixar geração** | Mystic: mesmos parâmetros tendem a gerar o mesmo resultado. |
 | **Destravar** | Libera a interface se uma geração travar. O resultado antigo é ignorado. |
 | **LoRA** | Estilo treinado na conta Magnific. |

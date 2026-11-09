@@ -38,7 +38,7 @@ PROMPT_PADRAO = ""
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("GeraPrompt Render — gerar cena")
+        root.title("GeraPrompt Render v2.5 — gerar cena")
         root.geometry("900x860")
         self.ref = ""
         self.ref_linhas = ""
@@ -63,6 +63,7 @@ class App:
         self.tempo_inicio = None
         self.modo_qualidade = tk.BooleanVar(value=True)
         self.checar_conteudo = tk.BooleanVar(value=True)
+        self.escolher_manual = tk.BooleanVar(value=True)
         self.fixar_geracao = tk.BooleanVar(value=False)
 
         # 1) referência
@@ -140,6 +141,12 @@ class App:
             variable=self.checar_conteudo,
         )
         self.chk_conteudo.pack(fill="x", padx=14)
+        self.chk_manual = tk.Checkbutton(
+            root,
+            text="Escolher manualmente entre as 2 versões (abre comparador)",
+            variable=self.escolher_manual,
+        )
+        self.chk_manual.pack(fill="x", padx=14)
         self.chk_fixar = tk.Checkbutton(
             root,
             text="Fixar geração: mesmos parâmetros geram o mesmo resultado (Mystic)",
@@ -252,6 +259,12 @@ class App:
                             self.status.config(text=item[2])
                         else:
                             self.status.config(text=item[1])
+                    elif tipo == "escolher":
+                        if len(item) >= 5:
+                            job_id, candidatos, meta_base, pasta = item[1], item[2], item[3], item[4]
+                            if job_id != self.job_id:
+                                continue
+                            self._abrir_escolha(job_id, candidatos, meta_base, pasta)
                     elif tipo == "render_ok":
                         if len(item) >= 4:
                             job_id, jpg, nota = item[1], item[2], item[3]
@@ -506,6 +519,7 @@ class App:
             modo_qualidade = False
             self.status.config(text="Geração fixa ativa: gerando 1 versão.")
         checar_conteudo = self.checar_conteudo.get()
+        escolher_manual = self.escolher_manual.get()
         prompt_geracao = prompt
         cena_tem_agua = any(t in prompt.lower() for t in (
             "lake", "lago", "lagoa", "water", "água", "agua", "pool", "piscina", "espelho"
@@ -542,7 +556,7 @@ class App:
             target=self._gerar,
             args=(prompt_geracao, motor, lora_name, lora_strength, style_ref_path, structure_path,
                   engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo,
-                  job_id, pasta, estilo, fixar_geracao),
+                  job_id, pasta, estilo, fixar_geracao, escolher_manual),
             daemon=True,
         ).start()
 
@@ -629,9 +643,75 @@ class App:
         logging.info("CANDIDATO v%s nitidez=%.2f arquivo=%s", versao, score, jpg)
         return {"arquivo": jpg, "task_id": task_id, "url": url, "nitidez": score}
 
+    def _abrir_escolha(self, job_id, candidatos, meta_base, pasta):
+        if job_id != self.job_id:
+            return
+        top = tk.Toplevel(self.root)
+        top.title("Escolher a melhor versão")
+        top.geometry("1040x700")
+        top.transient(self.root)
+        top.grab_set()
+        self.janela_escolha = top
+        self._thumbs = []
+        tk.Label(top, text="Qual versão deve ser mantida?", font=("Segoe UI", 15, "bold")).pack(pady=10)
+        frame = tk.Frame(top)
+        frame.pack(fill="both", expand=True, padx=12, pady=4)
+        for i, cand in enumerate(candidatos):
+            col = tk.Frame(frame)
+            col.pack(side="left", expand=True, fill="both", padx=8)
+            im = Image.open(cand["arquivo"])
+            im.thumbnail((460, 330))
+            ph = ImageTk.PhotoImage(im)
+            self._thumbs.append(ph)
+            tk.Label(col, image=ph).pack(pady=4)
+            flag = " · ÁGUA INDEVIDA" if cand.get("agua_indevida") else ""
+            tk.Label(col, text=f"Versão {i + 1} · nitidez {cand['nitidez']:.0f}{flag}", font=("Segoe UI", 10)).pack(pady=3)
+            tk.Button(col, text=f"Usar versão {i + 1}", height=2,
+                      command=lambda idx=i: self._aplicar_escolha(job_id, candidatos, meta_base, pasta, idx)).pack(fill="x", pady=6)
+        def fechar():
+            melhor = min(range(len(candidatos)), key=lambda i: (bool(candidatos[i].get("agua_indevida")), -float(candidatos[i]["nitidez"])))
+            self._aplicar_escolha(job_id, candidatos, meta_base, pasta, melhor)
+        top.protocol("WM_DELETE_WINDOW", fechar)
+
+    def _aplicar_escolha(self, job_id, candidatos, meta_base, pasta, idx):
+        if job_id != self.job_id:
+            return
+        try:
+            if hasattr(self, "janela_escolha") and self.janela_escolha.winfo_exists():
+                self.janela_escolha.destroy()
+        except Exception:
+            pass
+        try:
+            escolhido = candidatos[idx]
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_jpg = os.path.join(pasta, f"cena_{stamp}.jpg")
+            os.replace(escolhido["arquivo"], final_jpg)
+            escolhido["arquivo"] = final_jpg
+            alt_jpg = None
+            for i, cand in enumerate(candidatos):
+                if i == idx:
+                    continue
+                alt_jpg = os.path.join(pasta, f"cena_{stamp}_alternativa.jpg")
+                os.replace(cand["arquivo"], alt_jpg)
+                cand["arquivo"] = alt_jpg
+                break
+            meta = dict(meta_base)
+            meta.update({"candidatos": candidatos, "arquivo_final": final_jpg, "arquivo_alternativo": alt_jpg, "escolha_manual": True})
+            with open(os.path.join(pasta, f"cena_{stamp}.json"), "w", encoding="utf-8") as f:
+                import json
+                json.dump(meta, f, ensure_ascii=False, indent=2)
+            nota = f"Versão {idx + 1} escolhida manualmente."
+            if alt_jpg:
+                nota += f"\nAlternativa salva em: {alt_jpg}"
+            logging.info("ESCOLHA MANUAL job=%s versao=%s arquivo=%s", job_id, idx + 1, final_jpg)
+            self._finalizar_render_ok(final_jpg, nota)
+        except Exception as e:
+            logging.exception("Falha ao aplicar escolha manual")
+            self._finalizar_render_erro(str(e))
+
     def _gerar(self, prompt, motor, lora_name, lora_strength, style_ref_path, structure_path,
                engine, resolution, aspecto, ref_image, modo_qualidade, checar_conteudo,
-               job_id, pasta, estilo, fixar_geracao):
+               job_id, pasta, estilo, fixar_geracao, escolher_manual):
         try:
             total = 2 if modo_qualidade else 1
             candidatos = []
@@ -667,18 +747,7 @@ class App:
                 return
             if not candidatos:
                 raise RuntimeError("; ".join(erros) if erros else "nenhuma versão gerada")
-            candidatos.sort(key=lambda x: (bool(x.get("agua_indevida")), -float(x["nitidez"])))
-            melhor = candidatos[0]
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            final_jpg = os.path.join(pasta, f"cena_{stamp}.jpg")
-            os.replace(melhor["arquivo"], final_jpg)
-            melhor["arquivo"] = final_jpg
-            alt_jpg = None
-            if len(candidatos) > 1:
-                alt_jpg = os.path.join(pasta, f"cena_{stamp}_alternativa.jpg")
-                os.replace(candidatos[1]["arquivo"], alt_jpg)
-                candidatos[1]["arquivo"] = alt_jpg
-            meta = {
+            meta_base = {
                 "data": datetime.now().isoformat(timespec="seconds"),
                 "motor": motor,
                 "estilo": estilo,
@@ -693,10 +762,24 @@ class App:
                 "checagem_conteudo": checar_conteudo,
                 "fixed_generation": fixar_geracao,
                 "prompt": prompt,
-                "candidatos": candidatos,
-                "arquivo_final": final_jpg,
-                "arquivo_alternativo": alt_jpg,
             }
+            if escolher_manual and len(candidatos) > 1:
+                logging.info("Aguardando escolha manual job=%s", job_id)
+                self.fila_ui.put(("escolher", job_id, candidatos, meta_base, pasta))
+                return
+            candidatos.sort(key=lambda x: (bool(x.get("agua_indevida")), -float(x["nitidez"])))
+            melhor = candidatos[0]
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_jpg = os.path.join(pasta, f"cena_{stamp}.jpg")
+            os.replace(melhor["arquivo"], final_jpg)
+            melhor["arquivo"] = final_jpg
+            alt_jpg = None
+            if len(candidatos) > 1:
+                alt_jpg = os.path.join(pasta, f"cena_{stamp}_alternativa.jpg")
+                os.replace(candidatos[1]["arquivo"], alt_jpg)
+                candidatos[1]["arquivo"] = alt_jpg
+            meta = dict(meta_base)
+            meta.update({"candidatos": candidatos, "arquivo_final": final_jpg, "arquivo_alternativo": alt_jpg})
             with open(os.path.join(pasta, f"cena_{stamp}.json"), "w", encoding="utf-8") as f:
                 import json
                 json.dump(meta, f, ensure_ascii=False, indent=2)
